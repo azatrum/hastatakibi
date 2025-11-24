@@ -1,0 +1,42 @@
+[
+  { "name": "HEART Skoru", "diagnosis": "Akut Koroner Sendrom (AKS)" },
+  { "name": "TIMI Skoru (ACS)", "diagnosis": "Akut Koroner Sendrom (AKS)" },
+  { "name": "cTNI/cTnT", "diagnosis": "Akut Koroner Sendrom (AKS)" },
+  { "name": "ECG Skorlama", "diagnosis": "Myokard İnfarktüsü" },
+  
+  { "name": "Wells Skoru (PE)", "diagnosis": "Pulmoner Emboli (PE)" },
+  { "name": "PERC Kuralı (PE)", "diagnosis": "Pulmoner Emboli (PE)" },
+  { "name": "D-Dimer Testi", "diagnosis": "Pulmoner Emboli (PE)" },
+  
+  { "name": "NIHSS Skoru", "diagnosis": "İskemik İnme" },
+  { "name": "Cincinnati Prehospital Stroke Scale", "diagnosis": "İskemik İnme" },
+  
+  { "name": "HUNT ve HESS Skoru", "diagnosis": "İntrakraniyal Kanama (SAK/EDH/SDH)" },
+  { "name": "Glasgow Koma Skalası (GCS)", "diagnosis": "İntrakraniyal Kanama (SAK/EDH/SDH)" },
+  
+  { "name": "qSOFA Skoru", "diagnosis": "Sepsis ve Septik Şok" },
+  { "name": "SOFA Skoru", "diagnosis": "Sepsis ve Septik Şok" },
+  { "name": "NEWS Skoru", "diagnosis": "Sepsis ve Septik Şok" },
+  
+  { "name": "Framingham Kriterları", "diagnosis": "Akut Kalp Yetmezliği (AKY)" },
+  { "name": "ACUTE-HF Skoru", "diagnosis": "Akut Kalp Yetmezliği (AKY)" },
+  
+  { "name": "ADD-RS Skoru", "diagnosis": "Aort Diseksiyonu" },
+  
+  { "name": "Glomerular Filtration Rate (GFR)", "diagnosis": "Üriner Sistem Enfeksiyonu" },
+  { "name": "CURB-65 Skoru", "diagnosis": "Pnömoni (HAP/CAP/VAP)" },
+  { "name": "PSI Skoru", "diagnosis": "Pnömoni (HAP/CAP/VAP)" },
+  
+  { "name": "Alvarado Skoru", "diagnosis": "Akut Apandisit" },
+  
+  { "name": "Ranson Kriterleri", "diagnosis": "Akut Pankreatit" },
+  { "name": "APACHE II Skoru", "diagnosis": "Akut Pankreatit" },
+  
+  { "name": "Glasgow-Blatchford Skoru", "diagnosis": "Üst GIS Kanama" },
+  { "name": "AIMS65 Skoru", "diagnosis": "Üst GIS Kanama" },
+  
+  { "name": "APACHE II Skoru", "diagnosis": "Hipovolümik Şok" },
+  { "name": "Shock Index", "diagnosis": "Hipovolümik Şok" },
+  
+  { "name": "NEWS Skoru (Genel)", "diagnosis": "Hipertansif Kriz" }
+]
