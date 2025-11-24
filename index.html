@@ -2133,6 +2133,7 @@
                 const startContinuous = () => {
                     if (dragInterval) return;
                     dragInterval = setInterval(() => {
+                        console.log(`[${input.id || 'input'}] Interval: direction=${lastDirection}`);
                         if (lastDirection === 1) updateValue('up');
                         else if (lastDirection === -1) updateValue('down');
                     }, 50); // her 50ms bir güncelleme (hızlı)
@@ -2148,6 +2149,7 @@
                     startX = e.touches[0].clientX;
                     startY = e.touches[0].clientY;
                     lastDirection = 0;
+                    console.log(`[${input.id || 'input'}] touchstart at X=${startX}, Y=${startY}`);
                     startContinuous();
                 }, { passive: false });
 
@@ -2158,9 +2160,11 @@
                     const currentY = e.touches[0].clientY;
                     const deltaX = currentX - startX;
                     const deltaY = currentY - startY;
+                    console.log(`[${input.id || 'input'}] touchmove: deltaX=${deltaX}, deltaY=${deltaY}`);
                     // prioritize horizontal movement
                     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 3) {
                         lastDirection = deltaX > 0 ? 1 : -1;
+                        console.log(`[${input.id || 'input'}] Direction set to ${lastDirection}`);
                         // also apply immediate multiple steps for large moves
                         const MULTIPLE = Math.floor(Math.abs(deltaX) / 40);
                         if (MULTIPLE > 0) {
@@ -2172,22 +2176,53 @@
 
                 input.addEventListener('touchend', (e) => { e.preventDefault(); stopContinuous(); });
 
-                // Mouse handlers
+                // Mouse handlers - per-input, not global
                 let isMouseDown = false;
-                input.addEventListener('mousedown', (e) => { e.preventDefault(); isMouseDown = true; startX = e.clientX; startContinuous(); });
-                window.addEventListener('mousemove', (e) => {
+                
+                const handleMouseDown = (e) => {
+                    e.preventDefault();
+                    isMouseDown = true;
+                    startX = e.clientX;
+                    lastDirection = 0;
+                    console.log(`[${input.id || 'input'}] mousedown at X=${startX}`);
+                    startContinuous();
+                };
+                
+                const handleMouseMove = (e) => {
                     if (!isMouseDown || !dragInterval) return;
                     const deltaX = e.clientX - startX;
                     if (Math.abs(deltaX) > 3) {
                         lastDirection = deltaX > 0 ? 1 : -1;
+                        console.log(`[${input.id || 'input'}] mousemove: deltaX=${deltaX}, direction=${lastDirection}`);
                         const MULTIPLE = Math.floor(Math.abs(deltaX) / 40);
                         if (MULTIPLE > 0) {
                             for (let i=0;i<MULTIPLE;i++) updateValue(lastDirection===1?'up':'down');
                             startX = e.clientX;
                         }
                     }
+                };
+                
+                const handleMouseUp = (e) => {
+                    if (isMouseDown) {
+                        isMouseDown = false;
+                        stopContinuous();
+                        console.log(`[${input.id || 'input'}] mouseup`);
+                    }
+                };
+                
+                input.addEventListener('mousedown', handleMouseDown);
+                input.addEventListener('mouseenter', () => {
+                    document.addEventListener('mousemove', handleMouseMove);
+                    document.addEventListener('mouseup', handleMouseUp);
                 });
-                window.addEventListener('mouseup', () => { if (isMouseDown) { isMouseDown = false; stopContinuous(); } });
+                input.addEventListener('mouseleave', () => {
+                    document.removeEventListener('mousemove', handleMouseMove);
+                    document.removeEventListener('mouseup', handleMouseUp);
+                    if (isMouseDown) {
+                        isMouseDown = false;
+                        stopContinuous();
+                    }
+                });
             });
         }
 
@@ -4102,30 +4137,69 @@
 
                     // Başlat: canlı video üzerinden jsQR ile tarama (dinamik olarak kütüphane yüklenecek)
                     try {
-                        if (!window.jsQR) {
-                            await new Promise((resolve, reject) => {
-                                const s = document.createElement('script');
-                                s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-                                s.onload = () => resolve();
-                                s.onerror = () => reject(new Error('jsQR yüklenemedi'));
-                                document.head.appendChild(s);
+                        const ensureJsQRLoaded = async () => {
+                            if (window.jsQR && typeof window.jsQR === 'function') {
+                                console.log('✅ jsQR zaten yüklü');
+                                return;
+                            }
+                            
+                            console.log('jsQR yükleniyor...');
+                            return new Promise((resolve, reject) => {
+                                const script = document.createElement('script');
+                                script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+                                
+                                let timeoutId = setTimeout(() => {
+                                    reject(new Error('jsQR yükleme timeout (5 saniye)'));
+                                }, 5000);
+                                
+                                script.onload = () => {
+                                    clearTimeout(timeoutId);
+                                    if (window.jsQR && typeof window.jsQR === 'function') {
+                                        console.log('✅ jsQR başarıyla yüklendi');
+                                        resolve();
+                                    } else {
+                                        console.error('❌ jsQR script yüklendi ama window.jsQR tanımlanmadı');
+                                        reject(new Error('window.jsQR undefined after load'));
+                                    }
+                                };
+                                
+                                script.onerror = (err) => {
+                                    clearTimeout(timeoutId);
+                                    console.error('❌ jsQR CDN yükleme hatası:', err);
+                                    reject(err);
+                                };
+                                
+                                document.head.appendChild(script);
                             });
-                        }
+                        };
+
+                        await ensureJsQRLoaded();
 
                         const videoEl = document.getElementById('camera-stream');
                         const canvas = document.createElement('canvas');
                         const ctx = canvas.getContext('2d');
+                        let scanCount = 0;
 
                         const scanLoop = () => {
-                            if (!scannerActive) return;
+                            if (!scannerActive) {
+                                console.log(`Tarama durduruldu (${scanCount} frame tarandı)`);
+                                return;
+                            }
                             try {
                                 if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
                                     canvas.width = videoEl.videoWidth || videoEl.clientWidth;
                                     canvas.height = videoEl.videoHeight || videoEl.clientHeight;
                                     ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
                                     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                                    
+                                    scanCount++;
+                                    if (scanCount % 10 === 0) {
+                                        console.log(`Taranıyor... (${scanCount} frames, window.jsQR: ${typeof window.jsQR})`);
+                                    }
+                                    
                                     const code = window.jsQR(imageData.data, canvas.width, canvas.height);
                                     if (code && code.data) {
+                                        console.log('✅ QR BULUNDU:', code.data);
                                         // bulundu: parse ve manuel sekmeye aktar
                                         const parsed = parseBarcode(code.data);
                                         applyParsedData(parsed);
@@ -4146,10 +4220,11 @@
                             requestAnimationFrame(scanLoop);
                         };
 
+                        console.log('Tarama loop başlatılıyor...');
                         requestAnimationFrame(scanLoop);
                     } catch (scanLibErr) {
-                        console.warn('Tarama başlatılamadı:', scanLibErr);
-                        showNotification('⚠️ Otomatik barkod tarama başlatılamadı; manuel sekmeye geç veya fotoğraf çek.', 'warning');
+                        console.error('Tarama başlatılamadı:', scanLibErr);
+                        showNotification('⚠️ Otomatik barkod tarama başlatılamadı (CDN sorunu?); manuel sekmeye geç veya fotoğraf çek.', 'warning');
                     }
 
                     // Bilgilendirme notu
@@ -4190,35 +4265,64 @@
                                         // Fotoğraftan otomatik barkod tarama (jsQR)
                                         img.onload = async () => {
                                             try {
-                                                if (!window.jsQR) {
+                                                console.log('Fotoğraf yüklendi, jsQR yükleme kontrol ediliyor');
+                                                
+                                                // Ensure jsQR is loaded
+                                                if (!window.jsQR || typeof window.jsQR !== 'function') {
+                                                    console.log('jsQR fotoğraf için yükleniyor...');
                                                     await new Promise((resolve, reject) => {
-                                                        const s = document.createElement('script');
-                                                        s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-                                                        s.onload = () => resolve();
-                                                        s.onerror = () => reject(new Error('jsQR yüklenemedi'));
-                                                        document.head.appendChild(s);
+                                                        const script = document.createElement('script');
+                                                        script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+                                                        
+                                                        let timeoutId = setTimeout(() => {
+                                                            reject(new Error('jsQR yükleme timeout'));
+                                                        }, 5000);
+                                                        
+                                                        script.onload = () => {
+                                                            clearTimeout(timeoutId);
+                                                            if (window.jsQR && typeof window.jsQR === 'function') {
+                                                                console.log('✅ jsQR fotoğraf taraması için yüklendi');
+                                                                resolve();
+                                                            } else {
+                                                                reject(new Error('window.jsQR undefined'));
+                                                            }
+                                                        };
+                                                        
+                                                        script.onerror = (err) => {
+                                                            clearTimeout(timeoutId);
+                                                            console.error('❌ jsQR yükleme hatası (fotoğraf):', err);
+                                                            reject(err);
+                                                        };
+                                                        
+                                                        document.head.appendChild(script);
                                                     });
+                                                } else {
+                                                    console.log('jsQR zaten yüklü (fotoğraf)');
                                                 }
+                                                
                                                 const canvas = document.createElement('canvas');
                                                 const ctx = canvas.getContext('2d');
                                                 canvas.width = img.width;
                                                 canvas.height = img.height;
                                                 ctx.drawImage(img, 0, 0);
                                                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                                                console.log(`Fotoğraf taranıyor: ${canvas.width}x${canvas.height}, jsQR type: ${typeof window.jsQR}`);
                                                 const code = window.jsQR(imageData.data, canvas.width, canvas.height);
                                                 if (code && code.data) {
+                                                    console.log('✅ Fotoğrafta QR BULUNDU:', code.data);
                                                     // Barkod bulundu
                                                     const parsed = parseBarcode(code.data);
                                                     applyParsedData(parsed);
                                                     switchTab('manual');
                                                     showNotification('✅ Fotoğraftan barkod ayrıştırıldı ve manuel sekmeye aktarıldı!', 'success');
                                                 } else {
+                                                    console.log('⚠️ Fotoğrafta barkod bulunamadı');
                                                     showNotification('⚠️ Fotoğrafta barkod bulunamadı. Manuel giriş yapın.', 'warning');
                                                     document.getElementById('camera-status').textContent = 'Barkod bulunamadı';
                                                 }
                                             } catch (scanErr) {
-                                                console.warn('Fotoğraf tarama hatası:', scanErr);
-                                                showNotification('⚠️ Fotoğraf taraması başarısız. Manuel giriş yapın.', 'warning');
+                                                console.error('Fotoğraf tarama hatası:', scanErr);
+                                                showNotification('⚠️ Fotoğraf taraması başarısız: ' + scanErr.message, 'warning');
                                             }
                                         };
                                     };
