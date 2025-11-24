@@ -2110,12 +2110,14 @@
                 const max = parseFloat(input.dataset.max);
                 const isFloat = step % 1 !== 0;
 
-                const updateValue = (direction) => {
-                    let currentValue = parseFloat(input.value) || 0;
-                    let newValue = direction === 'up' ? currentValue + step : currentValue - step;
-                    if (!isNaN(min) && newValue < min) newValue = min;
-                    if (!isNaN(max) && newValue > max) newValue = max;
-                    input.value = isFloat ? newValue.toFixed(1) : Math.round(newValue);
+                const updateValue = (direction, count = 1) => {
+                    for (let i = 0; i < count; i++) {
+                        let currentValue = parseFloat(input.value) || 0;
+                        let newValue = direction === 'up' ? currentValue + step : currentValue - step;
+                        if (!isNaN(min) && newValue < min) newValue = min;
+                        if (!isNaN(max) && newValue > max) newValue = max;
+                        input.value = isFloat ? newValue.toFixed(1) : Math.round(newValue);
+                    }
                     window.calculateAndSaveVitals(false);
                 };
 
@@ -2125,56 +2127,45 @@
                     if (e.deltaY < 0) updateValue('up'); else if (e.deltaY > 0) updateValue('down');
                 });
 
-                // Continuous drag: start an interval on press, update direction on move
-                let dragInterval = null;
-                let lastDirection = 0; // 1 = up, -1 = down
+                // Continuous drag: apply updates directly based on movement
                 let startX = 0, startY = 0;
-
-                const startContinuous = () => {
-                    if (dragInterval) return;
-                    dragInterval = setInterval(() => {
-                        console.log(`[${input.id || 'input'}] Interval: direction=${lastDirection}`);
-                        if (lastDirection === 1) updateValue('up');
-                        else if (lastDirection === -1) updateValue('down');
-                    }, 50); // her 50ms bir güncelleme (hızlı)
-                };
-                const stopContinuous = () => {
-                    if (dragInterval) { clearInterval(dragInterval); dragInterval = null; }
-                    lastDirection = 0;
-                };
 
                 // Touch handlers
                 input.addEventListener('touchstart', (e) => {
                     e.preventDefault();
                     startX = e.touches[0].clientX;
                     startY = e.touches[0].clientY;
-                    lastDirection = 0;
                     console.log(`[${input.id || 'input'}] touchstart at X=${startX}, Y=${startY}`);
-                    startContinuous();
                 }, { passive: false });
 
                 input.addEventListener('touchmove', (e) => {
-                    if (!dragInterval) return;
                     e.preventDefault();
                     const currentX = e.touches[0].clientX;
                     const currentY = e.touches[0].clientY;
                     const deltaX = currentX - startX;
                     const deltaY = currentY - startY;
-                    console.log(`[${input.id || 'input'}] touchmove: deltaX=${deltaX}, deltaY=${deltaY}`);
+                    
                     // prioritize horizontal movement
                     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 3) {
-                        lastDirection = deltaX > 0 ? 1 : -1;
-                        console.log(`[${input.id || 'input'}] Direction set to ${lastDirection}`);
-                        // also apply immediate multiple steps for large moves
-                        const MULTIPLE = Math.floor(Math.abs(deltaX) / 40);
-                        if (MULTIPLE > 0) {
-                            for (let i=0;i<MULTIPLE;i++) updateValue(lastDirection===1?'up':'down');
+                        const direction = deltaX > 0 ? 'up' : 'down';
+                        
+                        // Calculate units based on TOTAL movement from start
+                        // Every 20 pixels = 1 unit change
+                        const unitsToApply = Math.floor(Math.abs(deltaX) / 20);
+                        
+                        if (unitsToApply > 0) {
+                            console.log(`[${input.id || 'input'}] touchmove: totalDelta=${deltaX}, applying ${unitsToApply} units ${direction}`);
+                            updateValue(direction, unitsToApply);
+                            // Reset startX so next drag segment starts fresh
                             startX = currentX;
                         }
                     }
                 }, { passive: false });
 
-                input.addEventListener('touchend', (e) => { e.preventDefault(); stopContinuous(); });
+                input.addEventListener('touchend', (e) => { 
+                    e.preventDefault(); 
+                    console.log(`[${input.id || 'input'}] touchend`);
+                }, { passive: false });
 
                 // Mouse handlers - per-input, not global
                 let isMouseDown = false;
@@ -2183,20 +2174,24 @@
                     e.preventDefault();
                     isMouseDown = true;
                     startX = e.clientX;
-                    lastDirection = 0;
                     console.log(`[${input.id || 'input'}] mousedown at X=${startX}`);
-                    startContinuous();
                 };
                 
                 const handleMouseMove = (e) => {
-                    if (!isMouseDown || !dragInterval) return;
+                    if (!isMouseDown) return;
                     const deltaX = e.clientX - startX;
+                    
                     if (Math.abs(deltaX) > 3) {
-                        lastDirection = deltaX > 0 ? 1 : -1;
-                        console.log(`[${input.id || 'input'}] mousemove: deltaX=${deltaX}, direction=${lastDirection}`);
-                        const MULTIPLE = Math.floor(Math.abs(deltaX) / 40);
-                        if (MULTIPLE > 0) {
-                            for (let i=0;i<MULTIPLE;i++) updateValue(lastDirection===1?'up':'down');
+                        const direction = deltaX > 0 ? 'up' : 'down';
+                        
+                        // Calculate units based on TOTAL movement from start
+                        // Every 20 pixels = 1 unit change
+                        const unitsToApply = Math.floor(Math.abs(deltaX) / 20);
+                        
+                        if (unitsToApply > 0) {
+                            console.log(`[${input.id || 'input'}] mousemove: totalDelta=${deltaX}, applying ${unitsToApply} units ${direction}`);
+                            updateValue(direction, unitsToApply);
+                            // Reset startX so next drag segment starts fresh
                             startX = e.clientX;
                         }
                     }
@@ -2205,7 +2200,6 @@
                 const handleMouseUp = (e) => {
                     if (isMouseDown) {
                         isMouseDown = false;
-                        stopContinuous();
                         console.log(`[${input.id || 'input'}] mouseup`);
                     }
                 };
@@ -2220,7 +2214,6 @@
                     document.removeEventListener('mouseup', handleMouseUp);
                     if (isMouseDown) {
                         isMouseDown = false;
-                        stopContinuous();
                     }
                 });
             });
