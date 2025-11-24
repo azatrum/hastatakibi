@@ -2105,61 +2105,63 @@
                 if (input.dataset.listenersAdded) return;
                 input.dataset.listenersAdded = 'true';
 
-                const step = parseFloat(input.dataset.step) || 1;
                 const min = parseFloat(input.dataset.min);
                 const max = parseFloat(input.dataset.max);
+                const step = parseFloat(input.dataset.step) || 1;
                 const isFloat = step % 1 !== 0;
+                const range = max - min; // Total range (e.g., 42 - 30 = 12 for temp)
 
-                const updateValue = (direction, count = 1) => {
-                    for (let i = 0; i < count; i++) {
-                        let currentValue = parseFloat(input.value) || 0;
-                        let newValue = direction === 'up' ? currentValue + step : currentValue - step;
-                        if (!isNaN(min) && newValue < min) newValue = min;
-                        if (!isNaN(max) && newValue > max) newValue = max;
-                        input.value = isFloat ? newValue.toFixed(1) : Math.round(newValue);
-                    }
+                const updateValueByPosition = (clientX) => {
+                    // Get input's position and width on screen
+                    const rect = input.getBoundingClientRect();
+                    const inputLeft = rect.left;
+                    const inputWidth = rect.width;
+                    const inputRight = inputLeft + inputWidth;
+                    
+                    // Calculate position percentage (0 to 1)
+                    let posPercent = (clientX - inputLeft) / inputWidth;
+                    posPercent = Math.max(0, Math.min(1, posPercent)); // Clamp to 0-1
+                    
+                    // Calculate value based on position
+                    let newValue = min + (range * posPercent);
+                    
+                    // Apply step rounding
+                    newValue = Math.round(newValue / step) * step;
+                    
+                    // Apply min/max constraints
+                    if (newValue < min) newValue = min;
+                    if (newValue > max) newValue = max;
+                    
+                    // Update input value
+                    input.value = isFloat ? newValue.toFixed(1) : Math.round(newValue);
+                    
+                    console.log(`[${input.id || 'input'}] Position: ${(posPercent * 100).toFixed(0)}%, Value: ${input.value}`);
                     window.calculateAndSaveVitals(false);
                 };
 
-                // Wheel remains instant
+                // Wheel remains instant (small increments)
                 input.addEventListener('wheel', (e) => {
                     e.preventDefault();
-                    if (e.deltaY < 0) updateValue('up'); else if (e.deltaY > 0) updateValue('down');
+                    let currentValue = parseFloat(input.value) || min;
+                    let newValue = e.deltaY < 0 ? currentValue + step : currentValue - step;
+                    if (newValue < min) newValue = min;
+                    if (newValue > max) newValue = max;
+                    input.value = isFloat ? newValue.toFixed(1) : Math.round(newValue);
+                    window.calculateAndSaveVitals(false);
                 });
 
-                // Continuous drag: apply updates directly based on movement
-                let startX = 0, startY = 0;
-
-                // Touch handlers
+                // Touch drag - position-based value mapping
                 input.addEventListener('touchstart', (e) => {
                     e.preventDefault();
-                    startX = e.touches[0].clientX;
-                    startY = e.touches[0].clientY;
-                    console.log(`[${input.id || 'input'}] touchstart at X=${startX}, Y=${startY}`);
+                    const touch = e.touches[0];
+                    updateValueByPosition(touch.clientX);
+                    console.log(`[${input.id || 'input'}] touchstart`);
                 }, { passive: false });
 
                 input.addEventListener('touchmove', (e) => {
                     e.preventDefault();
-                    const currentX = e.touches[0].clientX;
-                    const currentY = e.touches[0].clientY;
-                    const deltaX = currentX - startX;
-                    const deltaY = currentY - startY;
-                    
-                    // prioritize horizontal movement
-                    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 3) {
-                        const direction = deltaX > 0 ? 'up' : 'down';
-                        
-                        // Calculate units based on TOTAL movement from start
-                        // Every 20 pixels = 1 unit change
-                        const unitsToApply = Math.floor(Math.abs(deltaX) / 20);
-                        
-                        if (unitsToApply > 0) {
-                            console.log(`[${input.id || 'input'}] touchmove: totalDelta=${deltaX}, applying ${unitsToApply} units ${direction}`);
-                            updateValue(direction, unitsToApply);
-                            // Reset startX so next drag segment starts fresh
-                            startX = currentX;
-                        }
-                    }
+                    const touch = e.touches[0];
+                    updateValueByPosition(touch.clientX);
                 }, { passive: false });
 
                 input.addEventListener('touchend', (e) => { 
@@ -2167,34 +2169,19 @@
                     console.log(`[${input.id || 'input'}] touchend`);
                 }, { passive: false });
 
-                // Mouse handlers - per-input, not global
+                // Mouse drag - position-based value mapping
                 let isMouseDown = false;
                 
                 const handleMouseDown = (e) => {
                     e.preventDefault();
                     isMouseDown = true;
-                    startX = e.clientX;
-                    console.log(`[${input.id || 'input'}] mousedown at X=${startX}`);
+                    updateValueByPosition(e.clientX);
+                    console.log(`[${input.id || 'input'}] mousedown`);
                 };
                 
                 const handleMouseMove = (e) => {
                     if (!isMouseDown) return;
-                    const deltaX = e.clientX - startX;
-                    
-                    if (Math.abs(deltaX) > 3) {
-                        const direction = deltaX > 0 ? 'up' : 'down';
-                        
-                        // Calculate units based on TOTAL movement from start
-                        // Every 20 pixels = 1 unit change
-                        const unitsToApply = Math.floor(Math.abs(deltaX) / 20);
-                        
-                        if (unitsToApply > 0) {
-                            console.log(`[${input.id || 'input'}] mousemove: totalDelta=${deltaX}, applying ${unitsToApply} units ${direction}`);
-                            updateValue(direction, unitsToApply);
-                            // Reset startX so next drag segment starts fresh
-                            startX = e.clientX;
-                        }
-                    }
+                    updateValueByPosition(e.clientX);
                 };
                 
                 const handleMouseUp = (e) => {
@@ -3986,12 +3973,14 @@
         });
 
         // --- Geliştirilmiş Barkod / QR Okuyucu Sistemi ---
+        // --- Geliştirilmiş Barkod / QR Okuyucu Sistemi ---
         (function() {
             let hidBuffer = '';
             let lastHIDKeyTime = 0;
             const HID_THRESHOLD = 120;
             let cameraActive = false;
             let scannerActive = false;
+            let currentStream = null; // Stream referansını tutmak için
 
             // HID Okuyucu: barkod verilerini ayrıştır
             function parseBarcode(raw) {
@@ -4056,6 +4045,48 @@
                     document.getElementById('scan-tab-manual').classList.remove('hidden');
                     document.getElementById('tab-manual').classList.add('text-indigo-600', 'border-b-2', 'border-indigo-600');
                 }
+                
+                // Kamera sekmesinden çıkılıyorsa kamerayı durdur
+                if (tabName !== 'camera' && cameraActive) {
+                    stopCameraAndScanning();
+                }
+            }
+            
+            // Kamerayı ve tarama döngüsünü durdurur
+            function stopCameraAndScanning() {
+                 scannerActive = false;
+                 cameraActive = false;
+                 const video = document.getElementById('camera-stream');
+                 if (currentStream) {
+                     currentStream.getTracks().forEach(track => track.stop());
+                     currentStream = null;
+                 }
+                 try { video.pause(); video.srcObject = null; } catch(e){}
+                 document.getElementById('camera-status').textContent = 'Kamera durduruldu';
+                 document.getElementById('camera-status').classList.remove('bg-green-600');
+                 document.getElementById('camera-status').classList.add('bg-red-600');
+            }
+
+            // jsQR kütüphanesini yükler
+            function ensureJsQRLoaded() {
+                if (window.jsQR && typeof window.jsQR === 'function') {
+                    return Promise.resolve();
+                }
+                return new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+                    script.onload = () => {
+                        if (window.jsQR && typeof window.jsQR === 'function') {
+                            resolve();
+                        } else {
+                            reject(new Error('window.jsQR tanımlanamadı.'));
+                        }
+                    };
+                    script.onerror = (err) => {
+                        reject(new Error('jsQR CDN yükleme hatası.'));
+                    };
+                    document.head.appendChild(script);
+                });
             }
 
             // Scan modal açıldığında HID'ye odaklan
@@ -4105,250 +4136,109 @@
                 showNotification('✅ Barkod ayrıştırıldı ve manuel sekmeye aktarıldı!', 'success');
             });
 
-            // Kamera QR/Barkod okuma (ZXing kütüphanesi gerekir)
+            // Kamera QR/Barkod okuma başlat
             document.getElementById('camera-start').addEventListener('click', async () => {
+                if (cameraActive) {
+                    stopCameraAndScanning();
+                    document.getElementById('camera-start').textContent = '📸 Kamera Başlat';
+                    return;
+                }
+                
+                document.getElementById('camera-start').textContent = 'Kamera Başlatılıyor...';
+                document.getElementById('camera-status').textContent = 'Kamera başlatılıyor...';
+                document.getElementById('camera-status').classList.remove('bg-green-600');
+                document.getElementById('camera-status').classList.add('bg-red-600');
+
                 try {
+                    // jsQR kütüphanesini yükle
+                    await ensureJsQRLoaded();
+                    
+                    // Kamera akışını başlat
                     const constraints = { video: { facingMode: 'environment' } };
                     const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                    const video = document.getElementById('camera-stream');
-                    // Mobil tarayıcılarda otomatik oynatma katı olabilir: muted + playsinline + await play()
-                    video.muted = true;
-                    video.setAttribute('playsinline', '');
-                    video.srcObject = stream;
-                    try {
-                        await video.play();
-                    } catch (playErr) {
-                        // Bazı eski tarayıcılarda otomatik play engellenebilir; kullanıcı etkileşimi ile çalışmalıdır
-                        console.warn('Video play() başarısız:', playErr);
-                    }
-
+                    currentStream = stream; // Stream referansını kaydet
+                    const videoEl = document.getElementById('camera-stream');
+                    
+                    videoEl.muted = true;
+                    videoEl.setAttribute('playsinline', '');
+                    videoEl.srcObject = stream;
+                    
+                    // Video oynamaya başlayana kadar bekle
+                    await new Promise(resolve => {
+                        videoEl.onloadedmetadata = () => {
+                            videoEl.play().then(resolve).catch(err => {
+                                console.warn("Video play() hatası (devam ediliyor):", err);
+                                resolve();
+                            });
+                        };
+                    });
+                    
                     document.getElementById('camera-status').textContent = 'Kamera aktif - Barkod okutun';
                     document.getElementById('camera-status').classList.remove('bg-red-600');
                     document.getElementById('camera-status').classList.add('bg-green-600');
+                    document.getElementById('camera-start').textContent = 'Kamerayı Durdur';
                     cameraActive = true;
                     scannerActive = true;
+                    
+                    // Tarama döngüsünü başlat
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    let scanCount = 0;
 
-                    // Başlat: canlı video üzerinden jsQR ile tarama (dinamik olarak kütüphane yüklenecek)
-                    try {
-                        const ensureJsQRLoaded = async () => {
-                            if (window.jsQR && typeof window.jsQR === 'function') {
-                                console.log('✅ jsQR zaten yüklü');
-                                return;
-                            }
-                            
-                            console.log('jsQR yükleniyor...');
-                            return new Promise((resolve, reject) => {
-                                const script = document.createElement('script');
-                                script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-                                
-                                let timeoutId = setTimeout(() => {
-                                    reject(new Error('jsQR yükleme timeout (5 saniye)'));
-                                }, 5000);
-                                
-                                script.onload = () => {
-                                    clearTimeout(timeoutId);
-                                    if (window.jsQR && typeof window.jsQR === 'function') {
-                                        console.log('✅ jsQR başarıyla yüklendi');
-                                        resolve();
-                                    } else {
-                                        console.error('❌ jsQR script yüklendi ama window.jsQR tanımlanmadı');
-                                        reject(new Error('window.jsQR undefined after load'));
-                                    }
-                                };
-                                
-                                script.onerror = (err) => {
-                                    clearTimeout(timeoutId);
-                                    console.error('❌ jsQR CDN yükleme hatası:', err);
-                                    reject(err);
-                                };
-                                
-                                document.head.appendChild(script);
-                            });
-                        };
-
-                        await ensureJsQRLoaded();
-
-                        const videoEl = document.getElementById('camera-stream');
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        let scanCount = 0;
-
-                        const scanLoop = () => {
-                            if (!scannerActive) {
-                                console.log(`Tarama durduruldu (${scanCount} frame tarandı)`);
-                                return;
-                            }
-                            try {
-                                if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
-                                    canvas.width = videoEl.videoWidth || videoEl.clientWidth;
-                                    canvas.height = videoEl.videoHeight || videoEl.clientHeight;
-                                    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-                                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                                    
-                                    scanCount++;
-                                    if (scanCount % 10 === 0) {
-                                        console.log(`Taranıyor... (${scanCount} frames, window.jsQR: ${typeof window.jsQR})`);
-                                    }
-                                    
-                                    const code = window.jsQR(imageData.data, canvas.width, canvas.height);
-                                    if (code && code.data) {
-                                        console.log('✅ QR BULUNDU:', code.data);
-                                        // bulundu: parse ve manuel sekmeye aktar
-                                        const parsed = parseBarcode(code.data);
-                                        applyParsedData(parsed);
-                                        switchTab('manual');
-                                        showNotification('✅ Barkod ayrıştırıldı ve manuel sekmeye aktarıldı!', 'success');
-
-                                        // durdur
-                                        scannerActive = false;
-                                        try { if (videoEl && videoEl.srcObject) videoEl.srcObject.getTracks().forEach(t=>t.stop()); } catch(e){}
-                                        cameraActive = false;
-                                        try { videoEl.pause(); videoEl.srcObject = null; } catch(e){}
-                                        return;
-                                    }
-                                }
-                            } catch (scanErr) {
-                                console.warn('Tarama hatası:', scanErr);
-                            }
-                            requestAnimationFrame(scanLoop);
-                        };
-
-                        console.log('Tarama loop başlatılıyor...');
-                        requestAnimationFrame(scanLoop);
-                    } catch (scanLibErr) {
-                        console.error('Tarama başlatılamadı:', scanLibErr);
-                        showNotification('⚠️ Otomatik barkod tarama başlatılamadı (CDN sorunu?); manuel sekmeye geç veya fotoğraf çek.', 'warning');
-                    }
-
-                    // Bilgilendirme notu
-                    showNotification('💡 İpucu: Daha gelişmiş QR okuma için ZXing veya jsQR entegre edilmiştir.', 'info');
-                } catch (err) {
-                    document.getElementById('camera-status').textContent = 'Kamera erişimi reddedildi';
-                    showNotification('❌ Kamera erişimi başarısız: ' + err.message, 'error');
-
-                    // Mobil tarayıcılarda secure context (HTTPS) gereksinimi olabilir.
-                    // Fallback: file input ile fotoğraf çekme (capture) - kullanıcı etkileşimi gerektirir, dolayısıyla buradan tetikleyebiliriz.
-                    try {
-                        const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent || '');
-                        if (isMobile) {
-                            let fileInput = document.getElementById('camera-file-input');
-                            if (!fileInput) {
-                                fileInput = document.createElement('input');
-                                fileInput.type = 'file';
-                                fileInput.accept = 'image/*';
-                                fileInput.capture = 'environment';
-                                fileInput.id = 'camera-file-input';
-                                fileInput.className = 'hidden';
-                                fileInput.addEventListener('change', (ev) => {
-                                    const file = ev.target.files && ev.target.files[0];
-                                    if (!file) return;
-                                    const reader = new FileReader();
-                                    reader.onload = () => {
-                                        const container = document.getElementById('camera-container');
-                                        // remove existing children and show image preview
-                                        container.innerHTML = '';
-                                        const img = document.createElement('img');
-                                        img.src = reader.result;
-                                        img.style.width = '100%';
-                                        img.style.height = '100%';
-                                        img.style.objectFit = 'cover';
-                                        container.appendChild(img);
-                                        document.getElementById('camera-status').textContent = 'Fotoğraf yüklendi - Barkod taranıyor...';
-                                        
-                                        // Fotoğraftan otomatik barkod tarama (jsQR)
-                                        img.onload = async () => {
-                                            try {
-                                                console.log('Fotoğraf yüklendi, jsQR yükleme kontrol ediliyor');
-                                                
-                                                // Ensure jsQR is loaded
-                                                if (!window.jsQR || typeof window.jsQR !== 'function') {
-                                                    console.log('jsQR fotoğraf için yükleniyor...');
-                                                    await new Promise((resolve, reject) => {
-                                                        const script = document.createElement('script');
-                                                        script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-                                                        
-                                                        let timeoutId = setTimeout(() => {
-                                                            reject(new Error('jsQR yükleme timeout'));
-                                                        }, 5000);
-                                                        
-                                                        script.onload = () => {
-                                                            clearTimeout(timeoutId);
-                                                            if (window.jsQR && typeof window.jsQR === 'function') {
-                                                                console.log('✅ jsQR fotoğraf taraması için yüklendi');
-                                                                resolve();
-                                                            } else {
-                                                                reject(new Error('window.jsQR undefined'));
-                                                            }
-                                                        };
-                                                        
-                                                        script.onerror = (err) => {
-                                                            clearTimeout(timeoutId);
-                                                            console.error('❌ jsQR yükleme hatası (fotoğraf):', err);
-                                                            reject(err);
-                                                        };
-                                                        
-                                                        document.head.appendChild(script);
-                                                    });
-                                                } else {
-                                                    console.log('jsQR zaten yüklü (fotoğraf)');
-                                                }
-                                                
-                                                const canvas = document.createElement('canvas');
-                                                const ctx = canvas.getContext('2d');
-                                                canvas.width = img.width;
-                                                canvas.height = img.height;
-                                                ctx.drawImage(img, 0, 0);
-                                                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                                                console.log(`Fotoğraf taranıyor: ${canvas.width}x${canvas.height}, jsQR type: ${typeof window.jsQR}`);
-                                                const code = window.jsQR(imageData.data, canvas.width, canvas.height);
-                                                if (code && code.data) {
-                                                    console.log('✅ Fotoğrafta QR BULUNDU:', code.data);
-                                                    // Barkod bulundu
-                                                    const parsed = parseBarcode(code.data);
-                                                    applyParsedData(parsed);
-                                                    switchTab('manual');
-                                                    showNotification('✅ Fotoğraftan barkod ayrıştırıldı ve manuel sekmeye aktarıldı!', 'success');
-                                                } else {
-                                                    console.log('⚠️ Fotoğrafta barkod bulunamadı');
-                                                    showNotification('⚠️ Fotoğrafta barkod bulunamadı. Manuel giriş yapın.', 'warning');
-                                                    document.getElementById('camera-status').textContent = 'Barkod bulunamadı';
-                                                }
-                                            } catch (scanErr) {
-                                                console.error('Fotoğraf tarama hatası:', scanErr);
-                                                showNotification('⚠️ Fotoğraf taraması başarısız: ' + scanErr.message, 'warning');
-                                            }
-                                        };
-                                    };
-                                    reader.readAsDataURL(file);
-                                });
-                                document.body.appendChild(fileInput);
-                            }
-                            fileInput.click();
+                    const scanLoop = () => {
+                        if (!scannerActive || !window.jsQR) {
+                            return;
                         }
-                    } catch (fallbackErr) {
-                        console.warn('Kamera fallback hata:', fallbackErr);
-                    }
+                        
+                        try {
+                            if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
+                                canvas.width = videoEl.videoWidth || 640;
+                                canvas.height = videoEl.videoHeight || 480;
+                                ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+                                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                                
+                                scanCount++;
+                                if (scanCount % 30 === 0) { // Her 30 frame'de bir kontrol et
+                                    document.getElementById('camera-status').textContent = `Taranıyor... (FPS: ${(scanCount / (new Date().getTime() - videoEl.startTime || 1)).toFixed(1)})`;
+                                    videoEl.startTime = new Date().getTime();
+                                    scanCount = 0;
+                                }
+                                
+                                const code = window.jsQR(imageData.data, canvas.width, canvas.height, {
+                                    inversionAttempts: "dontInvert",
+                                });
+                                
+                                if (code && code.data) {
+                                    console.log('✅ QR BULUNDU:', code.data);
+                                    stopCameraAndScanning();
+                                    const parsed = parseBarcode(code.data);
+                                    applyParsedData(parsed);
+                                    switchTab('manual');
+                                    showNotification('✅ Barkod ayrıştırıldı ve manuel sekmeye aktarıldı!', 'success');
+                                    return; // Başarılı, döngüyü sonlandır
+                                }
+                            }
+                        } catch (scanErr) {
+                            console.warn('Tarama hatası, durduruluyor:', scanErr);
+                            stopCameraAndScanning();
+                            showNotification('❌ Tarama sırasında kritik hata oluştu!', 'error');
+                            return;
+                        }
+                        requestAnimationFrame(scanLoop);
+                    };
+                    videoEl.startTime = new Date().getTime(); // Başlangıç zamanı
+                    scanLoop();
+                } catch (err) {
+                    stopCameraAndScanning();
+                    document.getElementById('camera-status').textContent = 'Kamera erişimi reddedildi veya hata oluştu';
+                    document.getElementById('camera-start').textContent = '📸 Kamera Başlat';
+                    showNotification('❌ Kamera erişimi başarısız: ' + err.message, 'error');
                 }
             });
 
             // Scan modal kapatıldığında kamerayı durdur
             document.getElementById('scan-cancel').addEventListener('click', () => {
-                if (cameraActive) {
-                    // stop scanner loop if running
-                    try { scannerActive = false; } catch(e){}
-                    const video = document.getElementById('camera-stream');
-                    if (video && video.srcObject) {
-                        try {
-                            video.srcObject.getTracks().forEach(track => track.stop());
-                        } catch (e) {
-                            console.warn('Kamerayı durdururken hata:', e);
-                        }
-                        // clear srcObject and pause
-                        try { video.pause(); } catch(e){}
-                        try { video.srcObject = null; } catch(e){}
-                    }
-                    cameraActive = false;
-                }
+                stopCameraAndScanning();
                 document.getElementById('scan-modal').classList.add('hidden');
             });
         })();
