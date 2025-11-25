@@ -3973,14 +3973,17 @@
         });
 
         // --- Geliştirilmiş Barkod / QR Okuyucu Sistemi ---
-        // --- Geliştirilmiş Barkod / QR Okuyucu Sistemi ---
+        
+       // --- Geliştirilmiş Barkod / QR Okuyucu Sistemi (Revizyon 3 - Güçlendirilmiş Tarama) ---
         (function() {
             let hidBuffer = '';
             let lastHIDKeyTime = 0;
             const HID_THRESHOLD = 120;
             let cameraActive = false;
             let scannerActive = false;
-            let currentStream = null; // Stream referansını tutmak için
+            let currentStream = null;
+            let videoEl = null; 
+            let animationFrameId = null;
 
             // HID Okuyucu: barkod verilerini ayrıştır
             function parseBarcode(raw) {
@@ -4054,14 +4057,19 @@
             
             // Kamerayı ve tarama döngüsünü durdurur
             function stopCameraAndScanning() {
-                 scannerActive = false;
-                 cameraActive = false;
-                 const video = document.getElementById('camera-stream');
-                 if (currentStream) {
-                     currentStream.getTracks().forEach(track => track.stop());
-                     currentStream = null;
-                 }
-                 try { video.pause(); video.srcObject = null; } catch(e){}
+                scannerActive = false;
+                cameraActive = false;
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                    animationFrameId = null;
+                }
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                    currentStream = null;
+                }
+                if (videoEl) {
+                    try { videoEl.pause(); videoEl.srcObject = null; } catch(e){}
+                }
                  document.getElementById('camera-status').textContent = 'Kamera durduruldu';
                  document.getElementById('camera-status').classList.remove('bg-green-600');
                  document.getElementById('camera-status').classList.add('bg-red-600');
@@ -4089,7 +4097,58 @@
                 });
             }
 
-            // Scan modal açıldığında HID'ye odaklan
+            // Tarama döngüsünü başlatan ana fonksiyon
+            function startScanning(videoEl, canvas, ctx) {
+                 if (!scannerActive) return;
+                 
+                 try {
+                     // Kameradan yeterli veri gelmiş mi?
+                     if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
+                         
+                         // Canvas boyutlarını, video çözünürlüğüne veya bir güvenilir varsayılana ayarla (640x480)
+                         const videoWidth = videoEl.videoWidth || 640;
+                         const videoHeight = videoEl.videoHeight || 480;
+                         
+                         if (videoWidth > 0 && videoHeight > 0) {
+                             canvas.width = videoWidth;
+                             canvas.height = videoHeight;
+                             
+                             // Görüntüyü Canvas'a çiz
+                             ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+                             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                             
+                             // jsQR ile tarama yap
+                             const code = window.jsQR(imageData.data, canvas.width, canvas.height, {
+                                 // Bu ayar, yansıma veya ters renkli barkodlar için iyidir
+                                 inversionAttempts: "dontInvert", 
+                             });
+                             
+                             if (code && code.data && code.data.trim().length > 0) {
+                                 console.log('✅ QR BULUNDU:', code.data);
+                                 stopCameraAndScanning();
+                                 const parsed = parseBarcode(code.data);
+                                 applyParsedData(parsed);
+                                 switchTab('manual');
+                                 showNotification('✅ Barkod ayrıştırıldı ve manuel sekmeye aktarıldı!', 'success');
+                                 return; // Başarılı, döngüyü sonlandır
+                             }
+                         }
+                     }
+                 } catch (scanErr) {
+                     // Bu bir donanım veya jsQR hatası olabilir
+                     console.error('Kritik Tarama Hatası:', scanErr);
+                     document.getElementById('camera-status').textContent = 'Kritik tarama hatası (Konsolu kontrol edin)';
+                     stopCameraAndScanning();
+                     showNotification('❌ Tarama sırasında kritik hata oluştu!', 'error');
+                     return; 
+                 }
+                 
+                 // Tarama başarılı olmazsa bir sonraki kareyi iste
+                 animationFrameId = requestAnimationFrame(() => startScanning(videoEl, canvas, ctx));
+            }
+
+
+            // HID Okuyucu: keydown listener'ı (önceki gibi)
             window.addEventListener('keydown', (e) => {
                 const scanModal = document.getElementById('scan-modal');
                 if (scanModal && scanModal.classList.contains('hidden')) return;
@@ -4157,21 +4216,14 @@
                     const constraints = { video: { facingMode: 'environment' } };
                     const stream = await navigator.mediaDevices.getUserMedia(constraints);
                     currentStream = stream; // Stream referansını kaydet
-                    const videoEl = document.getElementById('camera-stream');
+                    videoEl = document.getElementById('camera-stream'); // videoEl global olarak atandı
                     
                     videoEl.muted = true;
                     videoEl.setAttribute('playsinline', '');
                     videoEl.srcObject = stream;
                     
-                    // Video oynamaya başlayana kadar bekle
-                    await new Promise(resolve => {
-                        videoEl.onloadedmetadata = () => {
-                            videoEl.play().then(resolve).catch(err => {
-                                console.warn("Video play() hatası (devam ediliyor):", err);
-                                resolve();
-                            });
-                        };
-                    });
+                    // Video oynamaya başlar
+                    videoEl.play();
                     
                     document.getElementById('camera-status').textContent = 'Kamera aktif - Barkod okutun';
                     document.getElementById('camera-status').classList.remove('bg-red-600');
@@ -4180,54 +4232,14 @@
                     cameraActive = true;
                     scannerActive = true;
                     
-                    // Tarama döngüsünü başlat
+                    // Tarama için canvas ve context oluştur
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
-                    let scanCount = 0;
+                    
+                    // Tarama döngüsünü başlat
+                    // Video'nun oynamaya başlaması için kısa bir gecikme ekleyelim.
+                    setTimeout(() => startScanning(videoEl, canvas, ctx), 100);
 
-                    const scanLoop = () => {
-                        if (!scannerActive || !window.jsQR) {
-                            return;
-                        }
-                        
-                        try {
-                            if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
-                                canvas.width = videoEl.videoWidth || 640;
-                                canvas.height = videoEl.videoHeight || 480;
-                                ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-                                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                                
-                                scanCount++;
-                                if (scanCount % 30 === 0) { // Her 30 frame'de bir kontrol et
-                                    document.getElementById('camera-status').textContent = `Taranıyor... (FPS: ${(scanCount / (new Date().getTime() - videoEl.startTime || 1)).toFixed(1)})`;
-                                    videoEl.startTime = new Date().getTime();
-                                    scanCount = 0;
-                                }
-                                
-                                const code = window.jsQR(imageData.data, canvas.width, canvas.height, {
-                                    inversionAttempts: "dontInvert",
-                                });
-                                
-                                if (code && code.data) {
-                                    console.log('✅ QR BULUNDU:', code.data);
-                                    stopCameraAndScanning();
-                                    const parsed = parseBarcode(code.data);
-                                    applyParsedData(parsed);
-                                    switchTab('manual');
-                                    showNotification('✅ Barkod ayrıştırıldı ve manuel sekmeye aktarıldı!', 'success');
-                                    return; // Başarılı, döngüyü sonlandır
-                                }
-                            }
-                        } catch (scanErr) {
-                            console.warn('Tarama hatası, durduruluyor:', scanErr);
-                            stopCameraAndScanning();
-                            showNotification('❌ Tarama sırasında kritik hata oluştu!', 'error');
-                            return;
-                        }
-                        requestAnimationFrame(scanLoop);
-                    };
-                    videoEl.startTime = new Date().getTime(); // Başlangıç zamanı
-                    scanLoop();
                 } catch (err) {
                     stopCameraAndScanning();
                     document.getElementById('camera-status').textContent = 'Kamera erişimi reddedildi veya hata oluştu';
@@ -4242,6 +4254,8 @@
                 document.getElementById('scan-modal').classList.add('hidden');
             });
         })();
+
+
 
         
         document.getElementById('filter-select').addEventListener('change', (e) => { currentFilter = e.target.value; renderPatientCards(); });
