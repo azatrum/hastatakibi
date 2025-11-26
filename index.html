@@ -278,6 +278,26 @@
             50% { transform: scale(1.05); opacity: 0.9; }
         }
 
+        /* Collapsible sections (default collapsed) */
+        .collapsible { border-radius: 8px; overflow: hidden; }
+        .collapsible-header { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 10px; cursor:pointer; }
+        .collapsible-header .title { font-weight:600; }
+        .collapsible-toggle { background:transparent; border:none; font-size:16px; cursor:pointer; padding:4px; }
+        .collapsible-content { display:none; padding:0 0 8px 0; }
+        .collapsible.open .collapsible-content { display:block; }
+
+        /* Complaint presets popup */
+        .complaint-presets { position: absolute; z-index:60; background: #fff; border:1px solid #e5e7eb; border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,0.12); padding:8px; min-width:200px; }
+        .complaint-presets button { display:block; width:100%; text-align:left; padding:6px 8px; border-radius:6px; background:transparent; border:none; cursor:pointer; }
+        .complaint-presets button:hover { background:#f3f4f6; }
+
+        /* Multi-select patient cards */
+        .patient-card.selected-card { outline: 3px solid #2563eb; box-shadow: 0 6px 18px rgba(37,99,235,0.12); }
+        .patient-card .select-badge { position:absolute; top:8px; left:8px; background:#2563eb; color:#fff; width:28px; height:28px; border-radius:9999px; display:flex; align-items:center; justify-content:center; font-weight:700; z-index:20; }
+        #multi-action-toolbar { position: fixed; top: 1rem; right: 1rem; z-index:80; display:none; gap:8px; align-items:center; }
+        #multi-action-toolbar .toolbar-btn { background:#111827; color:#fff; padding:8px 10px; border-radius:8px; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,0.12); }
+        #multi-action-toolbar .toolbar-btn.secondary { background:#6b7280; }
+
     </style>
   <style>@view-transition { navigation: auto; }</style>
  </head>
@@ -293,6 +313,21 @@
       <button id="anamnesis-view-btn" class="px-3 py-1 md:px-6 md:py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition text-xs md:text-base"> Anamnez </button>
       <button id="settings-btn" class="px-3 py-1 md:px-6 md:py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition text-xs md:text-base"> ⚙️ Ayarlar </button>
      </div>
+            <!-- Multi-select toolbar (hidden until selection mode) -->
+            <div id="multi-action-toolbar">
+                <div id="multi-count" class="px-3 py-2 bg-white rounded text-sm font-semibold">0 seçildi</div>
+                <button id="multi-select-visible" class="toolbar-btn" title="Görünen tüm hastaları seç">Tümünü Seç (Görünen)</button>
+                <button id="multi-discharge" class="toolbar-btn secondary">Taburcu Et</button>
+                <button id="multi-delete" class="toolbar-btn">Sil</button>
+                <button id="multi-cancel" class="toolbar-btn secondary">İptal</button>
+            </div>
+            <!-- Undo toast for bulk delete -->
+            <div id="bulk-undo-toast" style="position:fixed; bottom:1rem; left:50%; transform:translateX(-50%); z-index:90; display:none;">
+                <div id="bulk-undo-msg" class="px-4 py-3 rounded-lg shadow-lg text-white bg-gray-800 text-sm flex items-center gap-3">
+                    <span id="bulk-undo-text">Hastalar silindi</span>
+                    <button id="bulk-undo-btn" class="px-3 py-1 bg-white text-gray-800 rounded">Geri Al</button>
+                </div>
+            </div>
     </div>
    </div>
    <!-- Main Content -->
@@ -318,7 +353,8 @@
          </select>
          <select id="filter-select" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm" onchange="renderPatientCards()"> <option value="all">Tüm Hastalar</option> <option value="active">Aktif Hastalar</option> <option value="discharged">Taburcu Edilenler</option> <option value="admitted">Yatış Verilenler</option> <option value="favorites">Favoriler</option> <option value="forensic">🚨 Adli Vakalar</option> </select>
          <!-- Issue 8: Yaşa Göralama Seçeneği Eklendi -->
-         <select id="sort-select" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm" onchange="renderPatientCards()"> <option value="time">Eklenme Saatine Göre</option> <option value="name">İsme Göre</option> <option value="age_desc">Yaşa Göre (Azalan)</option> <option value="age_asc">Yaşa Göre (Artan)</option> <option value="complaint">Şikayete Göre</option> </select>
+         <select id="sort-select" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm" onchange="renderPatientCards()"> <option value="time">Eklenme Saatine Göre</option> <option value="name">İsme Göre</option> <option value="age_desc">Yaşa Göre (Azalan)</option> <option value="age_asc">Yaşa Göre (Artan)</option> <option value="complaint">Şikayete Göre</option> <option value="bed">Yatak Numarasına Göre</option> </select>
+        
         </div>
        </div>
       </div>
@@ -574,6 +610,7 @@
       <option value="Diğer">Diğer</option>
      </select>
      <input id="scan-bed-number" type="text" placeholder="Oda/Yatak No (Opsiyonel)" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+    <textarea id="scan-complaint" placeholder="Geliş şikayeti (Opsiyonel)" class="w-full px-4 py-2 border border-gray-300 rounded-lg resize-y text-sm" rows="2"></textarea>
     </div>
 
     <!-- Butonlar (Tüm sekmeler için ortaklaştırılmış) -->
@@ -1151,34 +1188,15 @@
                     }
                     
                     selectedPatient.last_score = `${result.score} ${result.riskText}`; 
-                    
+
                     // Anamnez zaten calculateHEARTScore içinde güncellendi, şimdi kalanı kaydedelim.
                     updatePatientInLocalStorage(selectedPatient); 
-                    
+
                     resultEl.textContent = `HEART Skoru: ${result.score} - Risk: ${selectedPatient.heart_risk}. Kaydedildi ve Karara eklendi.`;
                     resultEl.classList.remove('hidden');
-                        try {
-                            const decisionEl = document.getElementById('detail-anam-decision');
-                            if (decisionEl) {
-                                const scoreResultText = `Alvarado Skoru: ${result.score}. ${result.interpretation}`;
-                                let existing = decisionEl.value || '';
-                                const pat = /Alvarado Skoru:.*?\.(\n|$)/;
-                                if (existing.includes('Alvarado Skoru:')) existing = existing.replace(pat, scoreResultText + '\n'); else existing = scoreResultText + '\n\n' + existing;
-                                decisionEl.value = existing.trim();
-                                selectedPatient.anamnesis_decision = existing.trim();
-                            }
-                        } catch (e) { console.warn('Alvarado karar ekleme hata:', e); }
-                        try {
-                            const decisionEl = document.getElementById('detail-anam-decision');
-                            if (decisionEl) {
-                                const scoreResultText = `CURB-65: ${result.score} - ${result.severity}. ${result.recommendation}`;
-                                let existing = decisionEl.value || '';
-                                const pat = /CURB-65:.*?\.(\n|$)/;
-                                if (existing.includes('CURB-65:')) existing = existing.replace(pat, scoreResultText + '\n'); else existing = scoreResultText + '\n\n' + existing;
-                                decisionEl.value = existing.trim();
-                                selectedPatient.anamnesis_decision = existing.trim();
-                            }
-                        } catch (e) { console.warn('CURB-65 karar ekleme hata:', e); }
+
+                    // Ensure a single, correct HEART line is present in the decision/anamnesis
+                    appendScoreToDecision('HEART Skoru', `HEART Skoru: ${result.score} - ${selectedPatient.heart_risk}.`);
                     renderDetailPanel(); 
                     showNotification('✅ HEART Skoru hesaplandı, karara eklendi ve kaydedildi!', 'success');
                 });
@@ -1217,63 +1235,36 @@
                         const resultEl = document.getElementById('timi-result');
                         resultEl.innerHTML = `<strong>TIMI Skoru: ${result.score}</strong><br/>Risk: ${result.risk}<br/><div class="text-xs mt-2 text-gray-700">${result.interpretation}</div>`;
                         resultEl.classList.remove('hidden');
+
+                        // Append relevant results safely using helper. Only add lines when properties exist.
                         try {
-                            const decisionEl = document.getElementById('detail-anam-decision');
-                            if (decisionEl) {
-                                const scoreResultText = `Shock Index: ${result.shockIndex} - ${result.severity}. ${result.interpretation}`;
-                                let existing = decisionEl.value || '';
-                                const pat = /Shock Index:.*?(\n|$)/;
-                                if (existing.includes('Shock Index:')) existing = existing.replace(pat, scoreResultText + '\n'); else existing = scoreResultText + '\n\n' + existing;
-                                decisionEl.value = existing.trim();
-                                selectedPatient.anamnesis_decision = existing.trim();
+                            if (result && typeof result === 'object') {
+                                if (result.shockIndex !== undefined) {
+                                    appendScoreToDecision('Shock Index', `Shock Index: ${result.shockIndex}${result.severity ? ' - ' + result.severity : ''}${result.interpretation ? '. ' + result.interpretation : ''}`);
+                                }
+                                if (result.score !== undefined && result.risk !== undefined) {
+                                    // TIMI primary line
+                                    appendScoreToDecision('TIMI Skoru', `TIMI Skoru: ${result.score}${result.risk ? ' - ' + result.risk : ''}${result.interpretation ? '. ' + result.interpretation : ''}`);
+                                } else if (result.score !== undefined) {
+                                    appendScoreToDecision('TIMI Skoru', `TIMI Skoru: ${result.score}${result.interpretation ? '. ' + result.interpretation : ''}`);
+                                }
+                                if (result.qsofa !== undefined || result.qSOFA !== undefined || result.q_sofa !== undefined) {
+                                    const q = result.qsofa ?? result.qSOFA ?? result.q_sofa;
+                                    appendScoreToDecision('qSOFA', `qSOFA: ${q}${result.interpretation ? '. ' + result.interpretation : ''}`);
+                                } else if (result.qsofa_score !== undefined) {
+                                    appendScoreToDecision('qSOFA', `qSOFA: ${result.qsofa_score}${result.interpretation ? '. ' + result.interpretation : ''}`);
+                                }
+                                if (result.gcs !== undefined || result.category !== undefined) {
+                                    const gcsVal = result.gcs ?? result.score;
+                                    appendScoreToDecision('GCS', `GCS: ${gcsVal}/15${result.category ? ' - ' + result.category : ''}${result.interpretation ? '. ' + result.interpretation : ''}`);
+                                }
+                                if (result.nihss !== undefined) {
+                                    appendScoreToDecision('NIHSS Skoru', `NIHSS Skoru: ${result.nihss}${result.severity ? ' - ' + result.severity : ''}${result.interpretation ? '. ' + result.interpretation : ''}`);
+                                }
                             }
-                        } catch (e) { console.warn('Shock Index karar ekleme hata:', e); }
-                        try {
-                            const decisionEl = document.getElementById('detail-anam-decision');
-                            if (decisionEl) {
-                                const scoreResultText = `qSOFA: ${result.score} - ${result.risk}. ${result.interpretation}`;
-                                let existing = decisionEl.value || '';
-                                const pat = /qSOFA:.*?\.(\n|$)/;
-                                if (existing.includes('qSOFA:')) existing = existing.replace(pat, scoreResultText + '\n'); else existing = scoreResultText + '\n\n' + existing;
-                                decisionEl.value = existing.trim();
-                                selectedPatient.anamnesis_decision = existing.trim();
-                            }
-                        } catch (e) { console.warn('qSOFA karar ekleme hata:', e); }
-                        try {
-                            const decisionEl = document.getElementById('detail-anam-decision');
-                            if (decisionEl) {
-                                const scoreResultText = `GCS: ${result.score}/15 - ${result.category}. ${result.interpretation}`;
-                                let existing = decisionEl.value || '';
-                                const pat = /GCS:.*?\.(\n|$)/;
-                                if (existing.includes('GCS:')) existing = existing.replace(pat, scoreResultText + '\n'); else existing = scoreResultText + '\n\n' + existing;
-                                decisionEl.value = existing.trim();
-                                selectedPatient.anamnesis_decision = existing.trim();
-                            }
-                        } catch (e) { console.warn('GCS karar ekleme hata:', e); }
-                        try {
-                            const decisionEl = document.getElementById('detail-anam-decision');
-                            if (decisionEl) {
-                                const scoreResultText = `NIHSS Skoru: ${result.score} - ${result.severity}. ${result.interpretation}`;
-                                let existing = decisionEl.value || '';
-                                const pat = /NIHSS Skoru:.*?\.(\n|$)/;
-                                if (existing.includes('NIHSS Skoru:')) existing = existing.replace(pat, scoreResultText + '\n'); else existing = scoreResultText + '\n\n' + existing;
-                                decisionEl.value = existing.trim();
-                                selectedPatient.anamnesis_decision = existing.trim();
-                            }
-                        } catch (e) { console.warn('NIHSS karar ekleme hata:', e); }
-                        // Karara ekle (anamnez decision)
-                        try {
-                            const decisionEl = document.getElementById('detail-anam-decision');
-                            if (decisionEl) {
-                                const scoreResultText = `TIMI Skoru: ${result.score} - ${result.risk}. ${result.interpretation}`;
-                                let existing = decisionEl.value || '';
-                                const pat = /TIMI Skoru:.*?\.(\n|$)/;
-                                if (existing.includes('TIMI Skoru:')) existing = existing.replace(pat, scoreResultText + '\n'); else existing = scoreResultText + '\n\n' + existing;
-                                decisionEl.value = existing.trim();
-                                selectedPatient.anamnesis_decision = existing.trim();
-                            }
-                        } catch (e) { console.warn('TIMI karar ekleme hata:', e); }
-                        selectedPatient.last_score = `TIMI: ${result.score} (${result.risk})`;
+                        } catch (e) { console.warn('TIMI-related decision append error:', e); }
+                        // store last score summary if available
+                        try { selectedPatient.last_score = `TIMI: ${result.score} (${result.risk || 'N/A'})`; } catch(e){}
                         updatePatientInLocalStorage(selectedPatient);
                     } catch (e) { console.error('TIMI hesaplama hatası:', e); }
                 });
@@ -1312,19 +1303,10 @@
                         const resultEl = document.getElementById('wells-result');
                         resultEl.innerHTML = `<strong>Wells Skoru: ${result.score}</strong><br/>Risk: ${result.risk}<br/><div class="text-xs mt-2 text-gray-700">${result.interpretation}</div>`;
                         resultEl.classList.remove('hidden');
-                            // Karara ekle (anamnez decision)
-                            try {
-                                const decisionEl = document.getElementById('detail-anam-decision');
-                                if (decisionEl) {
-                                    const scoreResultText = `Wells Skoru: ${result.score} - ${result.risk}. ${result.interpretation}`;
-                                    let existing = decisionEl.value || '';
-                                    const pat = /Wells Skoru:.*?\.(\n|$)/;
-                                    if (existing.includes('Wells Skoru:')) existing = existing.replace(pat, scoreResultText + '\n'); else existing = scoreResultText + '\n\n' + existing;
-                                    decisionEl.value = existing.trim();
-                                    selectedPatient.anamnesis_decision = existing.trim();
-                                }
-                            } catch (e) { console.warn('Wells karar ekleme hata:', e); }
-                        selectedPatient.last_score = `Wells: ${result.score} (${result.risk})`;
+                        try {
+                            appendScoreToDecision('Wells Skoru', `Wells Skoru: ${result.score}${result.risk ? ' - ' + result.risk : ''}${result.interpretation ? '. ' + result.interpretation : ''}`);
+                        } catch (e) { console.warn('Wells append error:', e); }
+                        try { selectedPatient.last_score = `Wells: ${result.score} (${result.risk || 'N/A'})`; } catch(e){}
                         updatePatientInLocalStorage(selectedPatient);
                     } catch (e) { console.error('Wells hesaplama hatası:', e); }
                 });
@@ -1362,6 +1344,8 @@
                         const resultEl = document.getElementById('nihss-result');
                         resultEl.innerHTML = `<strong>NIHSS Skoru: ${result.score}</strong><br/>Şiddet: ${result.severity}<br/><div class="text-xs mt-2 text-gray-700">${result.interpretation}</div>`;
                         resultEl.classList.remove('hidden');
+                        // Append NIHSS to decision safely
+                        try { appendScoreToDecision('NIHSS Skoru', `NIHSS Skoru: ${result.score}${result.severity ? ' - ' + result.severity : ''}${result.interpretation ? '. ' + result.interpretation : ''}`); } catch(e){}
                         selectedPatient.last_score = `NIHSS: ${result.score} (${result.severity})`;
                         updatePatientInLocalStorage(selectedPatient);
                     } catch (e) { console.error('NIHSS hesaplama hatası:', e); }
@@ -1398,6 +1382,7 @@
                         const resultEl = document.getElementById('gcs-result');
                         resultEl.innerHTML = `<strong>GCS: ${result.score}/15</strong><br/>Kategori: ${result.category}<br/><div class="text-xs mt-2 text-gray-700">${result.interpretation}</div>`;
                         resultEl.classList.remove('hidden');
+                        try { appendScoreToDecision('GCS', `GCS: ${result.score}/15${result.category ? ' - ' + result.category : ''}${result.interpretation ? '. ' + result.interpretation : ''}`); } catch(e){}
                         selectedPatient.last_score = `GCS: ${result.score}`;
                         updatePatientInLocalStorage(selectedPatient);
                     } catch (e) { console.error('GCS hesaplama hatası:', e); }
@@ -1428,6 +1413,7 @@
                         const resultEl = document.getElementById('qsofa-result');
                         resultEl.innerHTML = `<strong>qSOFA: ${result.score}/3</strong><br/>Risk: ${result.risk}<br/><div class="text-xs mt-2 text-gray-700">${result.interpretation}</div>`;
                         resultEl.classList.remove('hidden');
+                        try { appendScoreToDecision('qSOFA', `qSOFA: ${result.score}${result.risk ? ' - ' + result.risk : ''}${result.interpretation ? '. ' + result.interpretation : ''}`); } catch(e){}
                         selectedPatient.last_score = `qSOFA: ${result.score}`;
                         updatePatientInLocalStorage(selectedPatient);
                     } catch (e) { console.error('qSOFA hesaplama hatası:', e); }
@@ -1464,6 +1450,7 @@
                         const resultEl = document.getElementById('curb-result');
                         resultEl.innerHTML = `<strong>CURB-65: ${result.score}/5</strong><br/>Şiddet: ${result.severity}<br/>Mortalite: ${result.mortality}<br/><div class="text-xs mt-2 text-gray-700">${result.recommendation}</div>`;
                         resultEl.classList.remove('hidden');
+                        try { appendScoreToDecision('CURB-65', `CURB-65: ${result.score}${result.severity ? ' - ' + result.severity : ''}${result.recommendation ? '. ' + result.recommendation : ''}`); } catch(e){}
                         selectedPatient.last_score = `CURB-65: ${result.score}`;
                         updatePatientInLocalStorage(selectedPatient);
                     } catch (e) { console.error('CURB-65 hesaplama hatası:', e); }
@@ -1556,6 +1543,7 @@
                         const resultEl = document.getElementById('alvarado-result');
                         resultEl.innerHTML = `<strong>Alvarado: ${result.score}/10</strong><br/>Olasılık: ${result.likelihood}<br/><div class="text-xs mt-2 text-gray-700">${result.interpretation}</div>`;
                         resultEl.classList.remove('hidden');
+                        try { appendScoreToDecision('Alvarado Skoru', `Alvarado Skoru: ${result.score}${result.likelihood ? ' - ' + result.likelihood : ''}${result.interpretation ? '. ' + result.interpretation : ''}`); } catch(e){}
                         selectedPatient.last_score = `Alvarado: ${result.score}`;
                         updatePatientInLocalStorage(selectedPatient);
                     } catch (e) { console.error('Alvarado hesaplama hatası:', e); }
@@ -1581,6 +1569,7 @@
                         const resultEl = document.getElementById('shock-result');
                         resultEl.innerHTML = `<strong>Shock Index: ${result.shockIndex}</strong><br/>Şiddet: ${result.severity}<br/><div class="text-xs mt-2 text-gray-700">${result.interpretation}</div>`;
                         resultEl.classList.remove('hidden');
+                        try { appendScoreToDecision('Shock Index', `Shock Index: ${result.shockIndex}${result.severity ? ' - ' + result.severity : ''}${result.interpretation ? '. ' + result.interpretation : ''}`); } catch(e){}
                         selectedPatient.last_score = `Shock Index: ${result.shockIndex}`;
                         updatePatientInLocalStorage(selectedPatient);
                     } catch (e) { console.error('Shock Index hesaplama hatası:', e); }
@@ -1916,6 +1905,19 @@
             currentSort = document.getElementById('sort-select').value;
             if (currentSort === 'name') {
                 filteredPatients.sort((a, b) => a.patient_name.localeCompare(b.patient_name));
+            } else if (currentSort === 'bed') {
+                // Sort by bed number: try numeric part first then lexicographic
+                const bedKey = (s) => {
+                    const b = (s && s.bed_number) ? s.bed_number.toString().trim() : '';
+                    const m = b.match(/(\d+)/);
+                    const n = m ? parseInt(m[0], 10) : 9999;
+                    return { num: n, raw: b };
+                };
+                filteredPatients.sort((a, b) => {
+                    const A = bedKey(a), B = bedKey(b);
+                    if (A.num !== B.num) return A.num - B.num;
+                    return (A.raw || '').localeCompare(B.raw || '');
+                });
             } else if (currentSort === 'age_desc') {
                 filteredPatients.sort((a, b) => (b.age || 0) - (a.age || 0));
             } else if (currentSort === 'age_asc') {
@@ -2051,12 +2053,41 @@
             }).join('');
             
             container.querySelectorAll('.patient-card').forEach(card => {
+                // long-press to enter multi-select; click toggles selection when in multi-select mode
+                let longPressTimer = null;
+                const id = card.dataset.id;
+
+                const startLongPress = (ev) => {
+                    if (window.multiSelectMode) return; // already in mode
+                    longPressTimer = setTimeout(() => {
+                        window.enterMultiSelectMode(id);
+                    }, 600);
+                };
+                const cancelLongPress = (ev) => { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } };
+
+                card.addEventListener('mousedown', startLongPress);
+                card.addEventListener('touchstart', startLongPress, { passive: true });
+                card.addEventListener('mouseup', cancelLongPress);
+                card.addEventListener('mouseleave', cancelLongPress);
+                card.addEventListener('touchend', cancelLongPress);
+
                 card.addEventListener('click', (e) => {
-                    if (!e.target.classList.contains('favorite-btn')) {
-                        const id = card.dataset.id;
-                        selectedPatient = patients.find(p => p.__backendId === id);
+                        if (e.target.classList.contains('favorite-btn')) return; // favorite handled separately
+                        // Shift+click to start/ toggle multi-select on desktop without long-press
+                        if (e.shiftKey) {
+                            e.stopPropagation();
+                            if (!window.multiSelectMode) window.enterMultiSelectMode(id);
+                            window.toggleSelectCard(id);
+                            return;
+                        }
+                        if (window.multiSelectMode) {
+                            e.stopPropagation();
+                            window.toggleSelectCard(id);
+                            return;
+                        }
+                        const pid = card.dataset.id;
+                        selectedPatient = patients.find(p => p.__backendId === pid);
                         renderDetailPanel();
-                    }
                 });
             });
             
@@ -2097,6 +2128,151 @@
                 </button>
             `).join('');
         }
+
+        // Multi-select state
+        window.multiSelectMode = false;
+        window.multiSelected = new Set();
+
+        window.enterMultiSelectMode = (initialId) => {
+            window.multiSelectMode = true;
+            if (initialId) window.multiSelected.add(initialId);
+            document.getElementById('multi-action-toolbar').style.display = 'flex';
+            updateMultiSelectionUI();
+        };
+
+        window.exitMultiSelectMode = () => {
+            window.multiSelectMode = false;
+            window.multiSelected.clear();
+            document.getElementById('multi-action-toolbar').style.display = 'none';
+            updateMultiSelectionUI();
+        };
+
+        window.toggleSelectCard = (id) => {
+            if (!window.multiSelectMode) return;
+            if (window.multiSelected.has(id)) window.multiSelected.delete(id); else window.multiSelected.add(id);
+            updateMultiSelectionUI();
+        };
+
+        // Select or toggle all currently visible patient cards
+        window.selectAllVisible = () => {
+            // ensure we're in multi-select mode
+            if (!window.multiSelectMode) window.enterMultiSelectMode();
+
+            const cards = Array.from(document.querySelectorAll('.patient-card'));
+            const visibleCards = cards.filter(card => {
+                if (!card) return false;
+                if (card.offsetParent === null) return false;
+                const s = window.getComputedStyle(card);
+                if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
+                return true;
+            });
+
+            const visibleIds = visibleCards.map(c => c.dataset.id).filter(Boolean);
+            if (visibleIds.length === 0) return;
+
+            // Toggle behavior: if all visible already selected, unselect them; otherwise select all
+            const allSelected = visibleIds.every(id => window.multiSelected.has(id));
+            if (allSelected) {
+                visibleIds.forEach(id => window.multiSelected.delete(id));
+            } else {
+                visibleIds.forEach(id => window.multiSelected.add(id));
+            }
+
+            updateMultiSelectionUI();
+        };
+
+        function updateMultiSelectionUI() {
+            // update toolbar count
+            const count = window.multiSelected.size;
+            const countEl = document.getElementById('multi-count');
+            if (countEl) countEl.textContent = `${count} seçildi`;
+
+            // update card visuals
+            document.querySelectorAll('.patient-card').forEach(card => {
+                const id = card.dataset.id;
+                if (window.multiSelected.has(id)) {
+                    card.classList.add('selected-card');
+                    if (!card.querySelector('.select-badge')) {
+                        const badge = document.createElement('div'); badge.className = 'select-badge'; badge.textContent = '✓'; card.appendChild(badge);
+                    }
+                } else {
+                    card.classList.remove('selected-card');
+                    const b = card.querySelector('.select-badge'); if (b) b.remove();
+                }
+            });
+            // show/hide toolbar
+            const toolbar = document.getElementById('multi-action-toolbar');
+            if (toolbar) toolbar.style.display = count > 0 || window.multiSelectMode ? 'flex' : 'none';
+        }
+
+        // Actions: delete and discharge
+        window.deleteSelectedPatients = () => {
+            if (window.multiSelected.size === 0) return;
+            if (!confirm(`${window.multiSelected.size} hasta kalıcı olarak silinsin mi?`)) return;
+            const ids = Array.from(window.multiSelected);
+            // keep a temporary backup for undo
+            window._bulkDeleteBackup = patients.filter(p => ids.includes(p.__backendId));
+            // remove now
+            patients = patients.filter(p => !ids.includes(p.__backendId));
+            savePatientsToLocalStorage();
+            exitMultiSelectMode();
+            renderPatientCards();
+            showNotification('✅ Seçili hastalar silindi.', 'success');
+
+            // Show undo toast for 6 seconds
+            const toast = document.getElementById('bulk-undo-toast');
+            const text = document.getElementById('bulk-undo-text');
+            if (text) text.textContent = `${window._bulkDeleteBackup.length} hasta silindi. Geri almak için 'Geri Al' butonuna basın.`;
+            if (toast) toast.style.display = 'block';
+            // set timeout to clear backup
+            if (window._bulkDeleteTimeout) clearTimeout(window._bulkDeleteTimeout);
+            window._bulkDeleteTimeout = setTimeout(() => {
+                window._bulkDeleteBackup = null;
+                if (toast) toast.style.display = 'none';
+            }, 6000);
+        };
+
+        window.dischargeSelectedPatients = () => {
+            if (window.multiSelected.size === 0) return;
+            if (!confirm(`${window.multiSelected.size} hasta taburcu edilsin mi?`)) return;
+            const ids = Array.from(window.multiSelected);
+            patients.forEach(p => { if (ids.includes(p.__backendId)) { p.discharge_status = 'discharged'; } });
+            savePatientsToLocalStorage();
+            exitMultiSelectMode();
+            renderPatientCards();
+            showNotification('✅ Seçili hastalar taburcu edildi.', 'success');
+        };
+
+        // Attach toolbar buttons
+        document.addEventListener('click', (e) => {
+            const del = document.getElementById('multi-delete');
+            const dis = document.getElementById('multi-discharge');
+            const cancel = document.getElementById('multi-cancel');
+            const selectVisible = document.getElementById('multi-select-visible');
+            if (del && e.target === del) { e.preventDefault(); window.deleteSelectedPatients(); }
+            if (dis && e.target === dis) { e.preventDefault(); window.dischargeSelectedPatients(); }
+            if (cancel && e.target === cancel) { e.preventDefault(); window.exitMultiSelectMode(); }
+            if (selectVisible && e.target === selectVisible) { e.preventDefault(); window.selectAllVisible(); }
+        });
+
+        // Bulk undo handler
+        document.getElementById('bulk-undo-btn').addEventListener('click', (e) => {
+            e.preventDefault();
+            const toast = document.getElementById('bulk-undo-toast');
+            if (window._bulkDeleteBackup && Array.isArray(window._bulkDeleteBackup)) {
+                // restore
+                const restored = window._bulkDeleteBackup;
+                patients = patients.concat(restored);
+                // optional: sort by created_at to restore order roughly
+                patients.sort((a,b)=> new Date(b.created_at) - new Date(a.created_at));
+                savePatientsToLocalStorage();
+                renderPatientCards();
+                showNotification('↩️ Silinen hastalar geri alındı.', 'success');
+            }
+            window._bulkDeleteBackup = null;
+            if (window._bulkDeleteTimeout) { clearTimeout(window._bulkDeleteTimeout); window._bulkDeleteTimeout = null; }
+            if (toast) toast.style.display = 'none';
+        });
         
         // Issue 5: İnteraktif Vital Girişi için yardımcı fonksiyon
         function setupInteractiveVitals() {
@@ -2104,19 +2280,25 @@
             inputs.forEach(input => {
                 if (input.dataset.listenersAdded) return;
                 input.dataset.listenersAdded = 'true';
-
                 const min = parseFloat(input.dataset.min);
                 const max = parseFloat(input.dataset.max);
                 const step = parseFloat(input.dataset.step) || 1;
                 const isFloat = step % 1 !== 0;
                 const range = max - min; // Total range (e.g., 42 - 30 = 12 for temp)
 
+                // Debounce/save control
+                const SAVE_DEBOUNCE_MS = 300;
+                input._vitalSaveTimer = null;
+                const scheduleSave = () => {
+                    if (input._vitalSaveTimer) clearTimeout(input._vitalSaveTimer);
+                    input._vitalSaveTimer = setTimeout(() => { window.calculateAndSaveVitals(false); input._vitalSaveTimer = null; }, SAVE_DEBOUNCE_MS);
+                };
+
                 const updateValueByPosition = (clientX) => {
                     // Get input's position and width on screen
                     const rect = input.getBoundingClientRect();
                     const inputLeft = rect.left;
                     const inputWidth = rect.width;
-                    const inputRight = inputLeft + inputWidth;
                     
                     // Calculate position percentage (0 to 1)
                     let posPercent = (clientX - inputLeft) / inputWidth;
@@ -2135,11 +2317,11 @@
                     // Update input value
                     input.value = isFloat ? newValue.toFixed(1) : Math.round(newValue);
                     
-                    console.log(`[${input.id || 'input'}] Position: ${(posPercent * 100).toFixed(0)}%, Value: ${input.value}`);
-                    window.calculateAndSaveVitals(false);
+                    // Don't save on every move — schedule a debounced save
+                    scheduleSave();
                 };
 
-                // Wheel remains instant (small increments)
+                // Wheel: schedule a debounced save (so fast wheel doesn't cause immediate re-render)
                 input.addEventListener('wheel', (e) => {
                     e.preventDefault();
                     let currentValue = parseFloat(input.value) || min;
@@ -2147,15 +2329,14 @@
                     if (newValue < min) newValue = min;
                     if (newValue > max) newValue = max;
                     input.value = isFloat ? newValue.toFixed(1) : Math.round(newValue);
-                    window.calculateAndSaveVitals(false);
-                });
+                    scheduleSave();
+                }, { passive: false });
 
                 // Touch drag - position-based value mapping
                 input.addEventListener('touchstart', (e) => {
                     e.preventDefault();
                     const touch = e.touches[0];
                     updateValueByPosition(touch.clientX);
-                    console.log(`[${input.id || 'input'}] touchstart`);
                 }, { passive: false });
 
                 input.addEventListener('touchmove', (e) => {
@@ -2166,7 +2347,9 @@
 
                 input.addEventListener('touchend', (e) => { 
                     e.preventDefault(); 
-                    console.log(`[${input.id || 'input'}] touchend`);
+                    // On touchend save immediately (cancel debounce and save now)
+                    if (input._vitalSaveTimer) { clearTimeout(input._vitalSaveTimer); input._vitalSaveTimer = null; }
+                    window.calculateAndSaveVitals(false);
                 }, { passive: false });
 
                 // Mouse drag - position-based value mapping
@@ -2176,7 +2359,6 @@
                     e.preventDefault();
                     isMouseDown = true;
                     updateValueByPosition(e.clientX);
-                    console.log(`[${input.id || 'input'}] mousedown`);
                 };
                 
                 const handleMouseMove = (e) => {
@@ -2187,7 +2369,9 @@
                 const handleMouseUp = (e) => {
                     if (isMouseDown) {
                         isMouseDown = false;
-                        console.log(`[${input.id || 'input'}] mouseup`);
+                        // finalize save immediately on mouseup
+                        if (input._vitalSaveTimer) { clearTimeout(input._vitalSaveTimer); input._vitalSaveTimer = null; }
+                        window.calculateAndSaveVitals(false);
                     }
                 };
                 
@@ -2201,6 +2385,9 @@
                     document.removeEventListener('mouseup', handleMouseUp);
                     if (isMouseDown) {
                         isMouseDown = false;
+                        // user left the element while dragging: finalize save
+                        if (input._vitalSaveTimer) { clearTimeout(input._vitalSaveTimer); input._vitalSaveTimer = null; }
+                        window.calculateAndSaveVitals(false);
                     }
                 });
             });
@@ -2300,7 +2487,7 @@
                     <!-- Left Column -->
                     <div class="space-y-4">
                         <!-- Chief Complaint -->
-                        <div>
+                        <div style="position:relative;">
                             <label class="block font-semibold mb-2">Geliş Şikayeti</label>
                             <div class="flex gap-2 mb-2 flex-wrap">
                                 ${commonComplaints.map(c => `
@@ -2310,76 +2497,89 @@
                                     </button>
                                 `).join('')}
                             </div>
-                            <input type="text" id="detail-complaint" value="${selectedPatient.chief_complaint || ''}" 
-                                onchange="autoUpdateAnamnesisAndSave()"
-                                class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm">
+                            <div class="flex items-center gap-2">
+                                <input type="text" id="detail-complaint" value="${selectedPatient.chief_complaint || ''}" 
+                                    onchange="autoUpdateAnamnesisAndSave()"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm">
+                                <button id="detail-complaint-presets-btn" onclick="toggleComplaintPresets(event)" title="Hazır şikayetler" class="px-2 py-1 bg-gray-100 rounded-md hover:bg-gray-200">⋯</button>
+                            </div>
+                            <div id="complaint-presets" class="complaint-presets hidden" style="display:none;">
+                                ${commonComplaints.map(c => `
+                                    <button onclick="setComplaint('${c}'); document.getElementById('complaint-presets').style.display='none'">${c}</button>
+                                `).join('')}
+                            </div>
                         </div>
 
-                        <!-- Vitals (Issue 5: İnteraktif Inputlar) -->
-                        <div>
-                            <label class="block font-semibold mb-3 text-blue-700">📊 Vital Bulgular</label>
-                            <div class="grid grid-cols-2 gap-2 bg-blue-50 p-3 rounded-lg">
-                                <div>
-                                    <label class="text-xs font-semibold text-gray-600">🌡️ Ateş (°C)</label>
-                                    <input type="number" id="detail-temp" 
-                                        value="${selectedPatient.vitals_temp || DEFAULT_VITALS.vitals_temp}"
-                                        onchange="calculateAndSaveVitals()"
-                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="0.1" data-min="30" data-max="42">
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-gray-600">💓 Nabız (/dk)</label>
-                                    <input type="number" id="detail-pulse" 
-                                        value="${selectedPatient.vitals_pulse || DEFAULT_VITALS.vitals_pulse}"
-                                        onchange="calculateAndSaveVitals()"
-                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="5" data-min="20" data-max="200">
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-gray-600">💨 Sistolik TA (mmHg)</label>
-                                    <input type="number" id="detail-bp-sys" 
-                                        value="${selectedPatient.vitals_bp_systolic || DEFAULT_VITALS.vitals_bp_systolic}"
-                                        onchange="calculateAndSaveVitals()"
-                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="10" data-min="50" data-max="300">
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-gray-600">💨 Diastol TA (mmHg)</label>
-                                    <input type="number" id="detail-bp-dia" 
-                                        value="${selectedPatient.vitals_bp_diastolic || DEFAULT_VITALS.vitals_bp_diastolic}"
-                                        onchange="calculateAndSaveVitals()"
-                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="10" data-min="30" data-max="200">
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-gray-600">🫁 Solunum (/dk)</label>
-                                    <input type="number" id="detail-resp" 
-                                        value="${selectedPatient.vitals_resp_rate || DEFAULT_VITALS.vitals_resp_rate}"
-                                        onchange="calculateAndSaveVitals()"
-                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="2" data-min="4" data-max="40">
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-gray-600">🫁 SpO₂ (%)</label>
-                                    <input type="number" id="detail-spo2" 
-                                        value="${selectedPatient.vitals_spo2 || DEFAULT_VITALS.vitals_spo2}"
-                                        onchange="calculateAndSaveVitals()"
-                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="1" data-min="70" data-max="100">
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-gray-600">🧠 GCS (15)</label>
-                                    <input type="number" id="detail-gcs" 
-                                        value="${selectedPatient.vitals_gcs || DEFAULT_VITALS.vitals_gcs}"
-                                        onchange="calculateAndSaveVitals()"
-                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="1" data-min="3" data-max="15">
-                                </div>
-                                <div>
-                                    <label class="text-xs font-semibold text-gray-600">🍬 Kan Şekeri (mg/dL)</label>
-                                    <input type="number" id="detail-glucose" 
-                                        value="${selectedPatient.vitals_glucose || DEFAULT_VITALS.vitals_glucose}"
-                                        onchange="calculateAndSaveVitals()"
-                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="5" data-min="40" data-max="500">
-                                </div>
+                        <!-- Vitals (collapsible, default collapsed) -->
+                        <div class="collapsible" data-section="vitals">
+                            <div class="collapsible-header" onclick="toggleCollapsible(event, this)">
+                                <span class="title text-blue-700">📊 Vital Bulgular</span>
+                                <button class="collapsible-toggle" aria-expanded="false">▸</button>
                             </div>
-                            <button onclick="calculateAndSaveVitals()" 
-                                class="mt-2 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                                ✅ Vitalleri Kaydet
-                            </button>
+                            <div class="collapsible-content">
+                                <div class="grid grid-cols-2 gap-2 bg-blue-50 p-3 rounded-lg">
+                                    <div>
+                                        <label class="text-xs font-semibold text-gray-600">🌡️ Ateş (°C)</label>
+                                        <input type="number" id="detail-temp" 
+                                            value="${selectedPatient.vitals_temp || DEFAULT_VITALS.vitals_temp}"
+                                            onchange="calculateAndSaveVitals()"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="0.1" data-min="30" data-max="42">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold text-gray-600">💓 Nabız (/dk)</label>
+                                        <input type="number" id="detail-pulse" 
+                                            value="${selectedPatient.vitals_pulse || DEFAULT_VITALS.vitals_pulse}"
+                                            onchange="calculateAndSaveVitals()"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="5" data-min="20" data-max="200">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold text-gray-600">💨 Sistolik TA (mmHg)</label>
+                                        <input type="number" id="detail-bp-sys" 
+                                            value="${selectedPatient.vitals_bp_systolic || DEFAULT_VITALS.vitals_bp_systolic}"
+                                            onchange="calculateAndSaveVitals()"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="10" data-min="50" data-max="300">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold text-gray-600">💨 Diastol TA (mmHg)</label>
+                                        <input type="number" id="detail-bp-dia" 
+                                            value="${selectedPatient.vitals_bp_diastolic || DEFAULT_VITALS.vitals_bp_diastolic}"
+                                            onchange="calculateAndSaveVitals()"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="10" data-min="30" data-max="200">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold text-gray-600">🫁 Solunum (/dk)</label>
+                                        <input type="number" id="detail-resp" 
+                                            value="${selectedPatient.vitals_resp_rate || DEFAULT_VITALS.vitals_resp_rate}"
+                                            onchange="calculateAndSaveVitals()"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="2" data-min="4" data-max="40">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold text-gray-600">🫁 SpO₂ (%)</label>
+                                        <input type="number" id="detail-spo2" 
+                                            value="${selectedPatient.vitals_spo2 || DEFAULT_VITALS.vitals_spo2}"
+                                            onchange="calculateAndSaveVitals()"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="1" data-min="70" data-max="100">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold text-gray-600">🧠 GCS (15)</label>
+                                        <input type="number" id="detail-gcs" 
+                                            value="${selectedPatient.vitals_gcs || DEFAULT_VITALS.vitals_gcs}"
+                                            onchange="calculateAndSaveVitals()"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="1" data-min="3" data-max="15">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold text-gray-600">🍬 Kan Şekeri (mg/dL)</label>
+                                        <input type="number" id="detail-glucose" 
+                                            value="${selectedPatient.vitals_glucose || DEFAULT_VITALS.vitals_glucose}"
+                                            onchange="calculateAndSaveVitals()"
+                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="5" data-min="40" data-max="500">
+                                    </div>
+                                </div>
+                                <button onclick="calculateAndSaveVitals()" 
+                                    class="mt-2 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                                    ✅ Vitalleri Kaydet
+                                </button>
+                            </div>
                         </div>
 
                         <!-- NEWS Skoru Hesapla -->
@@ -2396,75 +2596,95 @@
                         </div>
 
                         <!-- Ek Hastalıklar (Comorbidities) -->
-                        <div>
-                            <label class="block font-semibold mb-2 text-red-700">🏥 Ek Hastalıklar</label>
-                            <div class="flex gap-2 mb-2 flex-wrap">
-                                ${['Diyabetes', 'Hipertansiyon', 'KAH', 'KOAH', 'Astım', 'Böbrek Hastalığı', 'Karaciğer Hastalığı', 'Kanser', 'Epilepsi', 'Parkinson', 'Alzheimer'].map(c => `
-                                    <button onclick="toggleComorbidity('${c}')" 
-                                        class="comorbidity-btn px-3 py-1 bg-red-100 text-red-700 rounded-lg text-xs hover:bg-red-200 shadow-sm transition"
-                                        data-comorbidity="${c}">
-                                        ${c}
-                                    </button>
-                                `).join('')}
+                        <div class="collapsible" data-section="comorbidities">
+                            <div class="collapsible-header" onclick="toggleCollapsible(event, this)">
+                                <span class="title text-red-700">🏥 Ek Hastalıklar</span>
+                                <button class="collapsible-toggle" aria-expanded="false">▸</button>
                             </div>
-                            <input type="text" id="detail-comorbidities" placeholder="Diğer hastalıklar (virgülle ayırarak)" 
-                                value="${selectedPatient.comorbidities || ''}"
-                                onchange="updateAnamnesisField()"
-                                class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm">
+                            <div class="collapsible-content">
+                                <div class="flex gap-2 mb-2 flex-wrap">
+                                    ${['Diyabetes', 'Hipertansiyon', 'KAH', 'KOAH', 'Astım', 'Böbrek Hastalığı', 'Karaciğer Hastalığı', 'Kanser', 'Epilepsi', 'Parkinson', 'Alzheimer'].map(c => `
+                                        <button onclick="toggleComorbidity('${c}')" 
+                                            class="comorbidity-btn px-3 py-1 bg-red-100 text-red-700 rounded-lg text-xs hover:bg-red-200 shadow-sm transition"
+                                            data-comorbidity="${c}">
+                                            ${c}
+                                        </button>
+                                    `).join('')}
+                                </div>
+                                <input type="text" id="detail-comorbidities" placeholder="Diğer hastalıklar (virgülle ayırarak)" 
+                                    value="${selectedPatient.comorbidities || ''}"
+                                    onchange="updateAnamnesisField()"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm">
+                            </div>
                         </div>
 
                         <!-- İlaçlar (Medications) -->
-                        <div>
-                            <label class="block font-semibold mb-2 text-green-700">💊 Kullanılan İlaçlar</label>
-                            <div class="flex gap-2 mb-2 flex-wrap">
-                                ${['Aspirin', 'Metoprolol', 'Lisinopril', 'Metformin', 'İnsulin', 'Statin', 'Warfarin', 'Omeprazol'].map(c => `
-                                    <button onclick="toggleMedication('${c}')" 
-                                        class="medication-btn px-3 py-1 bg-green-100 text-green-700 rounded-lg text-xs hover:bg-green-200 shadow-sm transition"
-                                        data-medication="${c}">
-                                        ${c}
-                                    </button>
-                                `).join('')}
+                        <div class="collapsible" data-section="medications">
+                            <div class="collapsible-header" onclick="toggleCollapsible(event, this)">
+                                <span class="title text-green-700">💊 Kullanılan İlaçlar</span>
+                                <button class="collapsible-toggle" aria-expanded="false">▸</button>
                             </div>
-                            <input type="text" id="detail-medications" placeholder="Diğer ilaçlar (virgülle ayırarak)" 
-                                value="${selectedPatient.medications || ''}"
-                                onchange="updateAnamnesisField()"
-                                class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm">
+                            <div class="collapsible-content">
+                                <div class="flex gap-2 mb-2 flex-wrap">
+                                    ${['Aspirin', 'Metoprolol', 'Lisinopril', 'Metformin', 'İnsulin', 'Statin', 'Warfarin', 'Omeprazol'].map(c => `
+                                        <button onclick="toggleMedication('${c}')" 
+                                            class="medication-btn px-3 py-1 bg-green-100 text-green-700 rounded-lg text-xs hover:bg-green-200 shadow-sm transition"
+                                            data-medication="${c}">
+                                            ${c}
+                                        </button>
+                                    `).join('')}
+                                </div>
+                                <input type="text" id="detail-medications" placeholder="Diğer ilaçlar (virgülle ayırarak)" 
+                                    value="${selectedPatient.medications || ''}"
+                                    onchange="updateAnamnesisField()"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm">
+                            </div>
                         </div>
 
                         <!-- Operasyonlar (Surgeries) -->
-                        <div>
-                            <label class="block font-semibold mb-2 text-yellow-700">🔪 Geçirilen Operasyonlar</label>
-                            <div class="flex gap-2 mb-2 flex-wrap">
-                                ${['Apendektomi', 'Kolesistektomi', 'Histerektomi', 'Prostatektomi', 'By-pass', 'Stent', 'Vasektomi'].map(c => `
-                                    <button onclick="toggleSurgery('${c}')" 
-                                        class="surgery-btn px-3 py-1 bg-yellow-100 text-yellow-700 rounded-lg text-xs hover:bg-yellow-200 shadow-sm transition"
-                                        data-surgery="${c}">
-                                        ${c}
-                                    </button>
-                                `).join('')}
+                        <div class="collapsible" data-section="surgeries">
+                            <div class="collapsible-header" onclick="toggleCollapsible(event, this)">
+                                <span class="title text-yellow-700">🔪 Geçirilen Operasyonlar</span>
+                                <button class="collapsible-toggle" aria-expanded="false">▸</button>
                             </div>
-                            <input type="text" id="detail-surgeries" placeholder="Diğer operasyonlar (virgülle ayırarak)" 
-                                value="${selectedPatient.surgeries || ''}"
-                                onchange="updateAnamnesisField()"
-                                class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm">
+                            <div class="collapsible-content">
+                                <div class="flex gap-2 mb-2 flex-wrap">
+                                    ${['Apendektomi', 'Kolesistektomi', 'Histerektomi', 'Prostatektomi', 'By-pass', 'Stent', 'Vasektomi'].map(c => `
+                                        <button onclick="toggleSurgery('${c}')" 
+                                            class="surgery-btn px-3 py-1 bg-yellow-100 text-yellow-700 rounded-lg text-xs hover:bg-yellow-200 shadow-sm transition"
+                                            data-surgery="${c}">
+                                            ${c}
+                                        </button>
+                                    `).join('')}
+                                </div>
+                                <input type="text" id="detail-surgeries" placeholder="Diğer operasyonlar (virgülle ayırarak)" 
+                                    value="${selectedPatient.surgeries || ''}"
+                                    onchange="updateAnamnesisField()"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm">
+                            </div>
                         </div>
 
                         <!-- İlaç Alerjileri (Drug Allergies) -->
-                        <div>
-                            <label class="block font-semibold mb-2 text-purple-700">⚠️ İlaç Alerjileri</label>
-                            <div class="flex gap-2 mb-2 flex-wrap">
-                                ${['Penisilin', 'Sulfa', 'Aspirin', 'NSAID', 'ACE Inhibitör', 'Statin', 'Kontrastlı Madde'].map(c => `
-                                    <button onclick="toggleAllergy('${c}')" 
-                                        class="allergy-btn px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs hover:bg-purple-200 shadow-sm transition"
-                                        data-allergy="${c}">
-                                        ${c}
-                                    </button>
-                                `).join('')}
+                        <div class="collapsible" data-section="allergies">
+                            <div class="collapsible-header" onclick="toggleCollapsible(event, this)">
+                                <span class="title text-purple-700">⚠️ İlaç Alerjileri</span>
+                                <button class="collapsible-toggle" aria-expanded="false">▸</button>
                             </div>
-                            <input type="text" id="detail-allergies" placeholder="Diğer alerjiler (virgülle ayırarak)" 
-                                value="${selectedPatient.allergies || ''}"
-                                onchange="updateAnamnesisField()"
-                                class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm">
+                            <div class="collapsible-content">
+                                <div class="flex gap-2 mb-2 flex-wrap">
+                                    ${['Penisilin', 'Sulfa', 'Aspirin', 'NSAID', 'ACE Inhibitör', 'Statin', 'Kontrastlı Madde'].map(c => `
+                                        <button onclick="toggleAllergy('${c}')" 
+                                            class="allergy-btn px-3 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs hover:bg-purple-200 shadow-sm transition"
+                                            data-allergy="${c}">
+                                            ${c}
+                                        </button>
+                                    `).join('')}
+                                </div>
+                                <input type="text" id="detail-allergies" placeholder="Diğer alerjiler (virgülle ayırarak)" 
+                                    value="${selectedPatient.allergies || ''}"
+                                    onchange="updateAnamnesisField()"
+                                    class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm">
+                            </div>
                         </div>
                                         NEWS Hesapla & Kaydet
                                     </button>
@@ -2478,40 +2698,58 @@
                             ` : ''}
                         </div>
 
-                        <!-- Preliminary Diagnosis -->
-                        <div>
-                            <label class="block font-semibold mb-2">Ön Tanı (Skor Motoru)</label>
-                            <div class="flex gap-2 mb-2">
-                                <input type="text" id="detail-diagnosis" value="${selectedPatient.preliminary_diagnosis || ''}"
-                                    onchange="renderScoringButtons(); savePatientDetails();"
-                                    class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">
-                                <button onclick="openDiagnosisTemplateSelector()" 
-                                    class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 text-sm">
-                                    📋
-                                </button>
+                        <!-- Preliminary Diagnosis (collapsible) -->
+                        <div class="collapsible" data-section="preliminary-diagnosis">
+                            <div class="collapsible-header" onclick="toggleCollapsible(event, this)">
+                                <span class="title">Ön Tanı (Skor Motoru)</span>
+                                <button class="collapsible-toggle" aria-expanded="false">▸</button>
                             </div>
-                            ${diffDiag ? `
-                                <div class="text-xs text-gray-600 p-2 bg-gray-50 rounded shadow-sm">
-                                    <strong>Ayırıcı tanı:</strong> ${diffDiag}
+                            <div class="collapsible-content">
+                                <div class="flex gap-2 mb-2">
+                                    <input type="text" id="detail-diagnosis" value="${selectedPatient.preliminary_diagnosis || ''}"
+                                        onchange="renderScoringButtons(); savePatientDetails();"
+                                        class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">
+                                    <button onclick="openDiagnosisTemplateSelector()" 
+                                        class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 text-sm">
+                                        📋
+                                    </button>
                                 </div>
-                            ` : ''}
-                            <div id="scoring-buttons" class="mt-2 flex flex-wrap gap-2">
-                                <!-- Scoring buttons will be rendered here (Issue 1) -->
+                                ${diffDiag ? `
+                                    <div class="text-xs text-gray-600 p-2 bg-gray-50 rounded shadow-sm">
+                                        <strong>Ayırıcı tanı:</strong> ${diffDiag}
+                                    </div>
+                                ` : ''}
+                                <div id="scoring-buttons" class="mt-2 flex flex-wrap gap-2">
+                                    <!-- Scoring buttons will be rendered here (Issue 1) -->
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Test Templates and Active Tests -->
-                         <div>
-                            <label class="block font-semibold mb-2">Tetkik Şablonu Uygula</label>
-                            <div class="flex gap-2 mb-2">
-                                <select id="test-template-select" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">
-                                    <option value="">Şablon Seçin</option>
-                                    ${testTemplates.map((t, i) => `<option value="${i}">${t.name}</option>`).join('')}
-                                </select>
-                                <button onclick="applyTestTemplate()" 
-                                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
-                                    Uygula
-                                </button>
+                        <!-- Test Templates and Active Tests (collapsible) -->
+                        <div class="collapsible" data-section="tests">
+                            <div class="collapsible-header" onclick="toggleCollapsible(event, this)">
+                                <span class="title">Tetkik Şablonu Uygula</span>
+                                <button class="collapsible-toggle" aria-expanded="false">▸</button>
+                            </div>
+                            <div class="collapsible-content">
+                                <div class="flex gap-2 mb-2">
+                                    <select id="test-template-select" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm">
+                                        <option value="">Şablon Seçin</option>
+                                        ${testTemplates.map((t, i) => `<option value="${i}">${t.name}</option>`).join('')}
+                                    </select>
+                                    <button onclick="applyTestTemplate()" 
+                                        class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
+                                        Uygula
+                                    </button>
+                                </div>
+                               <div class="mb-2">
+                                   <label class="block text-sm font-semibold mb-1">Yeni Tetkikler (her satır yeni bir tetkik)</label>
+                                   <textarea id="detail-tests-free" rows="3" placeholder="Örnek:\nEKG\nTroponin" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></textarea>
+                                   <div class="mt-2 flex gap-2">
+                                       <button id="detail-add-tests" onclick="addFreeTextTests()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">+ Ekle</button>
+                                       <button onclick="document.getElementById('detail-tests-free').value=''" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm">Temizle</button>
+                                   </div>
+                               </div>
                             </div>
                         </div>
                         
@@ -2627,13 +2865,31 @@
             
             // Issue 5: İnteraktif inputları bağla
             setupInteractiveVitals();
-            
+
             // Skor butonlarını render etmeyi unutmayalım.
             renderScoringButtons(); 
 
-            if (window.innerWidth <= 768) {
-                panel.scrollTop = 0;
-            }
+            // Preserve which collapsible sections were open across re-renders
+            try {
+                const prevOpen = Array.from(panel.querySelectorAll('.collapsible.open')).map(c => c.dataset.section).filter(Boolean);
+                // After rendering, restore open state.
+                // Priority: if the user explicitly toggled a section, honor that (userCollapsibleState)
+                panel.querySelectorAll('.collapsible').forEach(c => {
+                    const section = c.dataset.section;
+                    const btn = c.querySelector('.collapsible-toggle');
+                    const userState = window.userCollapsibleState && Object.prototype.hasOwnProperty.call(window.userCollapsibleState, section) ? window.userCollapsibleState[section] : null;
+                    const shouldBeOpen = userState !== null ? !!userState : prevOpen.includes(section);
+                    if (shouldBeOpen) {
+                        c.classList.add('open');
+                        if (btn) { btn.setAttribute('aria-expanded', 'true'); btn.textContent = '▾'; }
+                    } else {
+                        c.classList.remove('open');
+                        if (btn) { btn.setAttribute('aria-expanded', 'false'); btn.textContent = '▸'; }
+                    }
+                });
+            } catch (e) { console.warn('Could not restore collapsible state', e); }
+
+            // preserve panel scroll (we won't forcibly reset to top)
         }
 
         
@@ -2839,6 +3095,11 @@
         window.savePatientDetails = function() {
             if (!selectedPatient) return;
 
+            // capture scroll positions to avoid jumping
+            const prevWindowScroll = window.scrollY || document.documentElement.scrollTop || 0;
+            const detailPanelEl = document.getElementById('detail-panel');
+            const prevPanelScroll = detailPanelEl ? detailPanelEl.scrollTop : 0;
+
             // Anamnez alanları saveDetailAnamnesis() tarafından işlenir.
             
             selectedPatient.preliminary_diagnosis = document.getElementById('detail-diagnosis').value.trim();
@@ -2853,7 +3114,14 @@
             updatePatientInLocalStorage(selectedPatient); 
             renderPatientCards(); // Listeyi güncelle
             renderDetailPanel(); // Detay paneli güncelle
-            
+
+            // restore scroll positions (use timeout to wait for reflow)
+            setTimeout(() => {
+                try { window.scrollTo(0, prevWindowScroll); } catch(e){}
+                const panelNow = document.getElementById('detail-panel');
+                if (panelNow) panelNow.scrollTop = prevPanelScroll;
+            }, 0);
+
             showNotification('✅ Detaylar ve durum kaydedildi!', 'success');
         };
 
@@ -2869,6 +3137,61 @@
             document.getElementById('detail-panel').classList.add('hidden');
             renderPatientCards(); 
         };
+
+        // Collapsible helpers
+        // Track user-controlled collapsible state so re-renders don't auto-close sections
+        window.userCollapsibleState = window.userCollapsibleState || {};
+        window.toggleCollapsible = (evt, headerEl) => {
+            // prevent accidental form submissions
+            evt && evt.stopPropagation();
+            const container = headerEl.closest('.collapsible');
+            if (!container) return;
+            const section = container.dataset.section || null;
+            const isOpen = container.classList.toggle('open');
+            const toggleBtn = headerEl.querySelector('.collapsible-toggle');
+            if (toggleBtn) {
+                toggleBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+                toggleBtn.textContent = isOpen ? '▾' : '▸';
+            }
+            // remember that the user explicitly opened/closed this section
+            if (section) {
+                window.userCollapsibleState[section] = !!isOpen;
+            }
+        };
+
+        window.initCollapsibles = () => {
+            document.querySelectorAll('.collapsible').forEach(c => {
+                c.classList.remove('open');
+                const btn = c.querySelector('.collapsible-toggle');
+                if (btn) btn.textContent = '▸';
+            });
+        };
+
+        // Complaint presets popup
+        window.toggleComplaintPresets = (e) => {
+            e && e.stopPropagation();
+            const el = document.getElementById('complaint-presets');
+            if (!el) return;
+            if (el.style.display === 'none' || el.classList.contains('hidden')) {
+                el.style.display = 'block';
+                el.classList.remove('hidden');
+            } else {
+                el.style.display = 'none';
+                el.classList.add('hidden');
+            }
+        };
+
+        // Close complaint presets when clicking outside
+        document.addEventListener('click', (e) => {
+            const presets = document.getElementById('complaint-presets');
+            const btn = document.getElementById('detail-complaint-presets-btn');
+            if (!presets) return;
+            if (e.target === btn) return;
+            if (!presets.contains(e.target)) {
+                presets.style.display = 'none';
+                presets.classList.add('hidden');
+            }
+        });
 
         window.setComplaint = (complaint) => {
             if (!selectedPatient) return;
@@ -3485,10 +3808,37 @@
                 }
             });
 
+        
+
             selectedPatient.tests_json = JSON.stringify(currentTests);
             updatePatientInLocalStorage(selectedPatient);
             renderDetailPanel();
             showNotification(`✅ ${template.name} uygulandı! ${template.tests.length} tetkik eklendi/kontrol edildi.`, 'success');
+        };
+
+        // Allow adding free-text tests separated by new lines (global)
+        window.addFreeTextTests = () => {
+            if (!selectedPatient) return;
+            const raw = document.getElementById('detail-tests-free').value || '';
+            const lines = raw.split(/\r?\n/).map(s => s.trim()).filter(s => s);
+            if (lines.length === 0) {
+                showNotification('⚠️ Eklemek için en az bir tetkik yazın.', 'warning');
+                return;
+            }
+            let currentTests = [];
+            try { currentTests = JSON.parse(selectedPatient.tests_json || '[]'); } catch(e){ currentTests = []; }
+            const now = new Date();
+            lines.forEach(name => {
+                // Avoid duplicates of same active test
+                if (!currentTests.some(t => t.name === name && !t.completed)) {
+                    currentTests.push({ name: name, dueTime: now.toISOString(), completed: false, result: '' });
+                }
+            });
+            selectedPatient.tests_json = JSON.stringify(currentTests);
+            updatePatientInLocalStorage(selectedPatient);
+            renderDetailPanel();
+            showNotification(`✅ ${lines.length} tetkik eklendi.`, 'success');
+            document.getElementById('detail-tests-free').value = '';
         };
 
 
@@ -3894,6 +4244,8 @@
             
             // Başlangıç görünümünü ve kartları render et
             renderPatientCards();
+            // İlk yüklemede collapsible başlıkları default kapalı konuma getir
+            try { initCollapsibles(); } catch (e) { console.warn('initCollapsibles hata:', e); }
             
             // Test kontrol intervalini başlat
             if (testCheckInterval === null) {
@@ -3925,18 +4277,19 @@
             const gender = document.getElementById('scan-gender').value;
             const area = document.getElementById('scan-area').value.trim();
             const bed = document.getElementById('scan-bed-number').value.trim();
+            const complaint = (document.getElementById('scan-complaint') && document.getElementById('scan-complaint').value) ? document.getElementById('scan-complaint').value.trim() : '';
 
             if (!name || !fileNumber) {
                 showNotification('❌ Hasta adı ve Dosya Numarası zorunludur.', 'error');
                 return;
             }
 
-            const newPatient = {
+                const newPatient = {
                 patient_name: name,
                 file_number: fileNumber,
                 age: isNaN(age) ? null : age,
                 gender: gender,
-                chief_complaint: '',
+                chief_complaint: complaint || '',
                 discharge_status: 'active',
                 is_favorite: false,
                 is_forensic: false, // Varsayılan olarak adli vaka değil
@@ -3946,7 +4299,7 @@
                 tests_json: '[]',
                 area_name: area, 
                 bed_number: bed,
-                anamnesis_complaint: '',
+                anamnesis_complaint: complaint || '',
                 anamnesis_history: '',
                 anamnesis_examination: '',
                 anamnesis_procedures: '',
@@ -3965,7 +4318,8 @@
                 document.getElementById('scan-age').value = '';
                 document.getElementById('scan-gender').value = '';
                 document.getElementById('scan-area').value = ''; 
-                document.getElementById('scan-bed-number').value = ''; 
+                document.getElementById('scan-bed-number').value = '';
+                if (document.getElementById('scan-complaint')) document.getElementById('scan-complaint').value = '';
             } else {
                 showNotification('❌ Hasta eklenirken bir hata oluştu!', 'error');
                 console.error('Hasta ekleme hatası:', result.error);
