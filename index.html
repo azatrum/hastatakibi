@@ -450,6 +450,16 @@
      <div id="settings-view" class="hidden">
       <div class="bg-white rounded-lg shadow-md p-4 md:p-6">
        <h2 class="text-xl md:text-2xl font-bold mb-6">⚙️ Ayarlar & Yedekleme</h2>
+       <div class="mb-6 border p-4 rounded-lg bg-indigo-50 border-indigo-200">
+        <h3 class="font-bold text-lg mb-2 text-indigo-700">🧠 Yapay Zeka Ayarları (Google Gemini)</h3>
+        <p class="text-sm text-indigo-600 mb-3">
+         Anamnez düzeltme asistanını kullanmak için Google Gemini API anahtarınızı buraya girin.
+        </p>
+        <div class="flex gap-2">
+         <input type="password" id="google-api-key-input" placeholder="Google API Key (AIzaSy...)" class="flex-1 px-4 py-2 border border-indigo-300 rounded-lg">
+         <button onclick="saveGoogleApiKey()" class="px-6 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700">Kaydet</button>
+        </div>
+       </div>
        <!-- GENEL YEDEKLEME BUTONLARI -->
        <div class="mb-8 border p-4 rounded-lg bg-red-50">
         <h3 class="font-bold text-lg mb-3 text-red-700">TÜM VERİLERİ YEDEKLE (Hastalar + Ayarlar)</h3>
@@ -2747,6 +2757,10 @@
                                                         class="template-icon mic-btn text-green-600 hover:text-green-800 text-xs flex-shrink-0" title="Konuşarak yaz">
                                                         🎤
                                                     </button>
+                                                    <button onclick="refineTextWithAI('detail-anam-${section}', '${labelMap[section]}')" 
+                                                    class="template-icon text-indigo-600 hover:text-indigo-800 text-xs flex-shrink-0 ml-1" title="Yapay Zeka ile Düzenle (Tıbbi & Hukuki)">
+                                                    🧠
+                                                    </button>
                                                     <span id="mic-indicator-detail-anam-${section}" class="mic-indicator hidden" style="display:none; align-items:center; gap:6px;">
                                                         <span class="mic-dot" aria-hidden="true"></span>
                                                         <span class="mic-wave" aria-hidden="true">
@@ -4752,6 +4766,142 @@
 
         // Uygulamayı başlat
         window.onload = initializeApp;
+
+
+        // --- YAPAY ZEKA ASİSTANI (GEMINI) ---
+        
+        // 1. API Anahtarını Kaydetme
+        function saveGoogleApiKey() {
+            const input = document.getElementById('google-api-key-input');
+            if (input && input.value.trim()) {
+                localStorage.setItem('gemini_api_key', input.value.trim());
+                showNotification('✅ API Anahtarı kaydedildi!', 'success');
+            } else {
+                showNotification('❌ Lütfen geçerli bir anahtar girin.', 'error');
+            }
+        }
+
+        // Sayfa açıldığında kayıtlı anahtar varsa inputa doldur (kullanıcı görsün diye)
+        // Bu kodu initializeApp içine de ekleyebiliriz ama burası da çalışır.
+        setTimeout(() => {
+            const savedKey = localStorage.getItem('gemini_api_key');
+            const inputEl = document.getElementById('google-api-key-input');
+            if (savedKey && inputEl) {
+                inputEl.value = savedKey;
+            }
+        }, 1000);
+
+       // 2. Metni Yapay Zeka ile İşleme Fonksiyonu (OTOMATİK MODEL BULUCU)
+        async function refineTextWithAI(elementId, sectionName) {
+            const textarea = document.getElementById(elementId);
+            const originalText = textarea.value.trim();
+            const apiKey = localStorage.getItem('gemini_api_key');
+
+            if (!apiKey) {
+                alert("Lütfen önce Ayarlar kısmından Google API Anahtarınızı girin.");
+                window.switchView('settings');
+                return;
+            }
+
+            if (!originalText || originalText.length < 3) {
+                showNotification('⚠️ Metin çok kısa.', 'error');
+                return;
+            }
+
+            const btn = event.target; 
+            const originalBtnText = btn.innerHTML;
+            btn.innerHTML = '⏳'; 
+            showNotification('🧠 Uygun model aranıyor ve işleniyor...', 'info');
+
+            const prompt = `
+                Sen tecrübeli bir Acil Tıp Uzmanı ve Hukuk Danışmanısın.
+                Aşağıdaki metin bir hastanın "${sectionName}" bölümüne aittir.
+                
+                GÖREVİN:
+                1. Yazım ve imla hatalarını düzelt.
+                2. Tıbbi terminolojiye çevir.
+                3. Hukuki açıdan hekimi koruyacak dil kullan.
+                4. Sadece düzeltilmiş metni ver.
+
+                METİN: "${originalText}"
+            `;
+
+            try {
+                // ADIM 1: Önce mevcut modelleri listele
+                const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+                const listResponse = await fetch(listUrl);
+                const listData = await listResponse.json();
+
+                if (listData.error) {
+                    throw new Error("Model listesi alınamadı: " + listData.error.message);
+                }
+
+                // ADIM 2: Listeden uygun bir 'gemini' modeli seç
+                let selectedModel = null;
+                // Öncelik sırasına göre arayalım
+                const priorityModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-pro'];
+                
+                // API'den gelen listede bizim öncelikli modellerimizden biri var mı?
+                if (listData.models) {
+                    for (let pModel of priorityModels) {
+                        const found = listData.models.find(m => m.name.includes(pModel));
+                        if (found) {
+                            selectedModel = found.name; // Örn: "models/gemini-1.5-flash"
+                            console.log("Seçilen Model:", selectedModel);
+                            break;
+                        }
+                    }
+                    // Eğer önceliklilerden yoksa, içinde "gemini" geçen ilk modeli al
+                    if (!selectedModel) {
+                        const anyGemini = listData.models.find(m => m.name.includes('gemini') && m.supportedGenerationMethods.includes('generateContent'));
+                        if (anyGemini) selectedModel = anyGemini.name;
+                    }
+                }
+
+                if (!selectedModel) {
+                    throw new Error("Hesabınızda erişilebilir bir 'Gemini' modeli bulunamadı.");
+                }
+
+                // ADIM 3: Bulunan modeli kullanarak isteği at
+                // selectedModel zaten "models/gemini-..." formatında gelir.
+                const generateUrl = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${apiKey}`;
+                
+                const response = await fetch(generateUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }]
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    alert("Model Hatası: " + data.error.message);
+                } 
+                else if (data.candidates && data.candidates.length > 0) {
+                    const newText = data.candidates[0].content.parts[0].text.trim();
+                    if (confirm(`Yapay Zeka (${selectedModel.replace('models/', '')}) Önerisi:\n\n${newText}\n\nOnaylıyor musunuz?`)) {
+                        textarea.value = newText;
+                        if(window.saveDetailAnamnesis) window.saveDetailAnamnesis();
+                        else if(window.savePatientDetails) window.savePatientDetails();
+                        showNotification('✅ Başarılı!', 'success');
+                    }
+                }
+
+            } catch (error) {
+                console.error('AI Hatası:', error);
+                // Kullanıcıya çözüm yolunu göster
+                alert(`BAĞLANTI HATASI:\n${error.message}\n\nÇÖZÜM:\nGoogle Cloud Console'a gidin, "Generative Language API" servisini aratın ve "ENABLE" (Etkinleştir) butonuna bastığınızdan emin olun.`);
+            } finally {
+                btn.innerHTML = originalBtnText; 
+            }
+        }
+        
+
+
+
+
     </script>
  </body>
 </html>
