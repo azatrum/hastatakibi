@@ -472,6 +472,42 @@
          <!-- Dosya Import Butonu (1. İstenen) -->
          <button id="import-all-data" onclick="document.getElementById('file-upload-input').click();" class="px-6 py-3 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition"> 📥 Tüm Veriyi İçe Aktar (JSON Dosyası) </button>
         </div>
+                 <div class="mt-3">
+                     <p class="text-sm text-red-600 mb-2">Hızlı Gönder: Dışa aktarılan JSON'u doğrudan paylaş</p>
+                     <div class="flex gap-2 flex-wrap">
+                         <button class="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600" onclick="shareAllData('whatsapp')">💬 WhatsApp ile Gönder</button>
+                         <button class="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-black" onclick="shareAllData('signal')">🔒 Signal ile Gönder</button>
+                         <button class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700" onclick="shareAllData('mail')">📧 E-posta ile Gönder</button>
+                     </div>
+                 </div>
+                 <div class="mt-6 border-t pt-4">
+                     <h4 class="font-semibold mb-2">Otomatik Yedekleme (Periyodik)</h4>
+                     <div class="flex items-center gap-2 mb-2">
+                         <label class="flex items-center gap-2"><input type="checkbox" id="auto-backup-enabled"> <span>Otomatik yedeklemeyi etkinleştir</span></label>
+                     </div>
+                     <div class="flex gap-2 items-center mb-2">
+                         <label class="text-sm">Aralık:</label>
+                         <select id="auto-backup-interval" class="px-3 py-2 border rounded">
+                             <option value="5">5 dakika</option>
+                             <option value="15">15 dakika</option>
+                             <option value="30">30 dakika</option>
+                             <option value="60">1 saat</option>
+                             <option value="240">4 saat</option>
+                         </select>
+                         <label class="text-sm">Hedef Dosya:</label>
+                         <input id="auto-backup-filename" class="px-3 py-2 border rounded w-64" placeholder="acil_takip_yedek.json">
+                     </div>
+                     <div class="flex gap-2 items-center mb-3">
+                         <label class="flex items-center gap-2"><input type="radio" name="auto-backup-mode" value="new" id="auto-backup-mode-new" checked> Her zaman yeni dosya</label>
+                         <label class="flex items-center gap-2"><input type="radio" name="auto-backup-mode" value="reuse" id="auto-backup-mode-reuse"> Son export edilen dosya ismine yaz (varsa)</label>
+                     </div>
+                     <div class="flex gap-2">
+                         <button class="px-4 py-2 bg-indigo-600 text-white rounded-lg" id="auto-backup-start">Başlat</button>
+                         <button class="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg" id="auto-backup-stop">Durdur</button>
+                         <button class="px-4 py-2 bg-yellow-500 text-white rounded-lg" id="auto-backup-now">Şimdi Yedekle</button>
+                     </div>
+                     <p class="text-xs text-gray-600 mt-2">Not: Tarayıcılar otomatik olarak bir dosyayı gerçek anlamda üzerine yazmaz; "son export edilen dosya ismine yaz" seçeneği seçildiğinde aynı dosya adı kullanılacaktır. Gerçek üzerine yazma için tarayıcı File System Access desteği ile ek izin gereklidir.</p>
+                 </div>
         <!-- Dosya Yükleme Inputu (Gizli) -->
         <input type="file" id="file-upload-input" class="hidden" accept=".json" onchange="handleFileImport(event, 'all')">
        </div>
@@ -908,6 +944,14 @@
             } catch (e) { console.info('heart engine yok veya yüklenemedi'); }
 
             try {
+                const edacsModule = await import('./external/engines/edacs.js');
+                if (edacsModule && typeof edacsModule.calculateEDACSScore === 'function') {
+                    window.calculateEDACSScore = edacsModule.calculateEDACSScore;
+                    console.info('External EDACS engine yüklendi ve override edildi.');
+                }
+            } catch (e) { console.info('edacs engine yok veya yüklenemedi'); }
+
+            try {
                 const newsModule = await import('./external/engines/news.js');
                 if (newsModule && typeof newsModule.calculateNEWS === 'function') {
                     window.calculateNEWS = newsModule.calculateNEWS;
@@ -1110,6 +1154,53 @@
         }
 
         /**
+         * EDACS Skoru (variant A): numeric age input, troponin excluded.
+         * Uses an MDCalc-style age mapping and common EDACS components.
+         * Please verify the point-table/thresholds against your reference.
+         */
+        function calculateEDACSScore(patient, inputs) {
+            try {
+                function toInt(v, fallback = 0) {
+                    const n = parseInt(v);
+                    return Number.isNaN(n) ? fallback : n;
+                }
+
+                const age = toInt(inputs.age, 0);
+                // Age points mapping (MDCalc-like): <40:0, 40-49:2, 50-59:4, 60-69:6, >=70:8
+                let agePoints = 0;
+                if (age >= 70) agePoints = 8;
+                else if (age >= 60) agePoints = 6;
+                else if (age >= 50) agePoints = 4;
+                else if (age >= 40) agePoints = 2;
+                else agePoints = 0;
+
+                const malePoints = toInt(inputs.male, 0) ? 1 : 0;
+                const radiationPoints = toInt(inputs.radiation, 0) ? 1 : 0;
+                const diaphoresisPoints = toInt(inputs.diaphoresis, 0) ? 1 : 0;
+                const painSeverityPoints = Math.min(Math.max(toInt(inputs.pain_severity, 0), 0), 3);
+                const riskFactorsPoints = Math.min(Math.max(toInt(inputs.risk_factors_count, 0), 0), 3);
+
+                const score = agePoints + malePoints + radiationPoints + diaphoresisPoints + painSeverityPoints + riskFactorsPoints;
+
+                let riskText = 'Bilinmiyor';
+                if (score <= 8) riskText = 'Düşük';
+                else if (score <= 15) riskText = 'Orta';
+                else riskText = 'Yüksek';
+
+                if (patient) {
+                    patient.edacs_score = score;
+                    patient.edacs_risk = riskText;
+                }
+
+                appendScoreToDecision('EDACS Skoru', `EDACS Skoru: ${score} - ${riskText}.`);
+                return { score, riskText };
+            } catch (e) {
+                console.error('calculateEDACSScore hata', e);
+                return { score: 0, riskText: 'Bilinmiyor' };
+            }
+        }
+
+        /**
          * Yardımcı: Skor sonucunu anamnez Karar bölümüne ekle/güncelle
          * @param {string} scoreLabel - Skor adı (örn. "HEART Skoru", "TIMI Skoru")
          * @param {string} scoreText - Eklenecek tam metin (örn. "HEART Skoru: 5 - Yüksek. ...")
@@ -1236,7 +1327,68 @@
                     showNotification('✅ HEART Skoru hesaplandı, karara eklendi ve kaydedildi!', 'success');
                 });
                 
-            } else if (scoreName === 'TIMI Skoru (ACS)') {
+                } else if (scoreName === 'EDACS Skoru') {
+                    contentEl.innerHTML = `
+                        <div class="space-y-3 text-sm">
+                            <p class="text-xs text-gray-600">EDACS (Variant A): Yaş giriniz, troponin bu varyantta hariç tutulmuştur.</p>
+                            <div>
+                                <label class="block font-semibold mb-1">Yaş (yıl)</label>
+                                <input id="edacs-age" type="number" min="0" max="120" class="w-full px-3 py-2 border rounded" placeholder="Örn: 57">
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input id="edacs-male" type="checkbox" /> <label for="edacs-male" class="text-sm">Erkek (1 puan)</label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input id="edacs-radiation" type="checkbox" /> <label for="edacs-radiation" class="text-sm">Ağrının yayılması (kol/çene/omuz) (1 puan)</label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <input id="edacs-diaphoresis" type="checkbox" /> <label for="edacs-diaphoresis" class="text-sm">Terleme/soğuk terleme (1 puan)</label>
+                            </div>
+                            <div>
+                                <label class="block font-semibold mb-1">Ağrı şiddeti (0-3)</label>
+                                <input id="edacs-painsev" type="number" min="0" max="3" value="0" class="w-full px-3 py-2 border rounded">
+                            </div>
+                            <div>
+                                <label class="block font-semibold mb-1">Risk faktörleri sayısı (0-3)</label>
+                                <input id="edacs-riskf" type="number" min="0" max="3" value="0" class="w-full px-3 py-2 border rounded">
+                            </div>
+                            <div class="mt-3">
+                                <button id="calculate-edacs" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Skoru Hesapla ve Karara Ekle</button>
+                                <div id="edacs-result" class="p-3 mt-2 bg-gray-100 rounded font-bold hidden"></div>
+                            </div>
+                        </div>
+                    `;
+
+                    document.getElementById('calculate-edacs').addEventListener('click', () => {
+                        const inputs = {
+                            age: document.getElementById('edacs-age').value,
+                            male: document.getElementById('edacs-male').checked ? 1 : 0,
+                            radiation: document.getElementById('edacs-radiation').checked ? 1 : 0,
+                            diaphoresis: document.getElementById('edacs-diaphoresis').checked ? 1 : 0,
+                            pain_severity: document.getElementById('edacs-painsev').value,
+                            risk_factors_count: document.getElementById('edacs-riskf').value
+                        };
+
+                        const result = (typeof calculateEDACSScore === 'function') ? calculateEDACSScore(selectedPatient, inputs) : { score: 0, riskText: 'Bilinmiyor' };
+                        const resultEl = document.getElementById('edacs-result');
+
+                        if (!selectedPatient.preliminary_diagnosis || selectedPatient.preliminary_diagnosis === '') {
+                            selectedPatient.preliminary_diagnosis = 'Akut Koroner Sendrom';
+                            document.getElementById('detail-diagnosis').value = 'Akut Koroner Sendrom';
+                        }
+
+                        selectedPatient.last_score = `${result.score} ${result.riskText}`;
+                        updatePatientInLocalStorage(selectedPatient);
+
+                        resultEl.textContent = `EDACS Skoru: ${result.score} - Risk: ${result.riskText}. Kaydedildi ve Karara eklendi.`;
+                        resultEl.classList.remove('hidden');
+
+                        appendScoreToDecision('EDACS Skoru', `EDACS Skoru: ${result.score} - ${result.riskText}.`);
+                        renderDetailPanel();
+                        showNotification('✅ EDACS Skoru hesaplandı, karara eklendi ve kaydedildi!', 'success');
+                    });
+
+                } else if (scoreName === 'TIMI Skoru (ACS)') {
                 contentEl.innerHTML = `
                     <div class="space-y-4 text-sm">
                         <div><label class="block font-semibold mb-1">Yaş ≥ 65 yaş mı?</label>
@@ -1670,7 +1822,9 @@
                 };
 
                 const json = JSON.stringify(exportData, null, 2);
-                downloadFile(json, "acil_takip_yedek.json");
+                const filename = 'acil_takip_yedek.json';
+                downloadFile(json, filename);
+                recordLastExportFilename(filename);
                 showNotification('✅ Tüm veriler (Hastalar + Ayarlar) indirildi!', 'success');
             } catch (error) {
                 console.error("Tüm verileri dışa aktarma hatası:", error);
@@ -1691,6 +1845,167 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+        }
+
+        // Record last exported filename for reuse
+        function recordLastExportFilename(filename) {
+            try { localStorage.setItem('lastExportFilename', filename); } catch (e) { console.warn('Could not save lastExportFilename', e); }
+        }
+
+        // Prepare export JSON string (same as exportAllDataToFile but returns string)
+        function prepareExportJsonString() {
+            const allPatients = loadPatientsFromLocalStorage();
+            const allSettings = getAllSettings();
+            const exportData = {
+                metadata: {
+                    app: defaultConfig.app_title,
+                    version: '2.5',
+                    export_date: new Date().toISOString()
+                },
+                patients: allPatients.map(p => {
+                    const { __backendId, ...rest } = p; return rest;
+                }),
+                settings: allSettings
+            };
+            return JSON.stringify(exportData, null, 2);
+        }
+
+        // Share helpers: try Web Share API with file, fallback to URL schemes or copy-to-clipboard
+        async function shareAllData(method) {
+            try {
+                const json = prepareExportJsonString();
+                const filename = 'acil_takip_yedek.json';
+
+                // Try Web Share with file if available
+                if (navigator.canShare && navigator.canShare({ files: [new File([json], filename, { type: 'application/json' })] })) {
+                    const file = new File([json], filename, { type: 'application/json' });
+                    await navigator.share({ files: [file], title: 'Acil Takip Yedeği', text: 'Acil Takip uygulaması yedeği' });
+                    showNotification('✅ Paylaşım aracı açıldı.', 'success');
+                    return;
+                }
+
+                // Fallbacks per method
+                const encoded = encodeURIComponent(json);
+                if (method === 'whatsapp') {
+                    // WhatsApp: use wa.me link with text (may be large; browser will attempt)
+                    const waUrl = `https://wa.me/?text=${encodeURIComponent('Acil Takip yedeği:\n')}` + '%0A' + encodeURIComponent(json);
+                    window.open(waUrl, '_blank');
+                    return;
+                }
+                if (method === 'mail') {
+                    const subject = encodeURIComponent('Acil Takip Yedeği');
+                    // mailto body may be limited length — attach as inline text
+                    const body = encodeURIComponent('Acil Takip uygulaması yedeği (JSON).\n--\n') + encoded;
+                    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+                    return;
+                }
+                if (method === 'signal') {
+                    // Signal does not have a reliable web share URL across platforms.
+                    // Try common deep link on Android; otherwise fallback to copying JSON to clipboard and instructing user to paste into Signal.
+                    const signalUrl = `sgnl://send?text=${encoded}`;
+                    // attempt open
+                    const newWin = window.open(signalUrl, '_blank');
+                    if (!newWin) {
+                        // fallback: copy to clipboard
+                        await copyToClipboard(json);
+                        showNotification('📋 JSON panoya kopyalandı. Signal uygulamasına yapıştırarak gönderin.', 'info');
+                    }
+                    return;
+                }
+
+                // Default fallback: copy to clipboard
+                await copyToClipboard(json);
+                showNotification('📋 JSON içeriği panoya kopyalandı. İstediğiniz uygulamaya yapıştırın.', 'info');
+            } catch (e) {
+                console.error('Paylaşım hatası:', e);
+                // As a last fallback, trigger download
+                try { downloadFile(prepareExportJsonString(), 'acil_takip_yedek.json'); showNotification('✅ JSON indirildi (fallback).', 'success'); } catch (err) { showNotification('❌ Paylaşım/indirme başarısız.', 'error'); }
+            }
+        }
+
+        async function copyToClipboard(text) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                return navigator.clipboard.writeText(text);
+            }
+            // fallback
+            const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } finally { ta.remove(); }
+        }
+
+        // --- Auto-backup logic ---
+        window._autoBackupTimer = null;
+        window._autoBackupSettings = {
+            enabled: false,
+            intervalMinutes: 60,
+            filename: 'acil_takip_yedek.json',
+            mode: 'new' // 'new' or 'reuse'
+        };
+
+        function loadAutoBackupSettings() {
+            try {
+                const s = JSON.parse(localStorage.getItem('autoBackupSettings') || 'null');
+                if (s) window._autoBackupSettings = Object.assign(window._autoBackupSettings, s);
+            } catch (e) { console.warn('loadAutoBackupSettings', e); }
+            // populate UI
+            const en = document.getElementById('auto-backup-enabled'); if (en) en.checked = !!window._autoBackupSettings.enabled;
+            const iv = document.getElementById('auto-backup-interval'); if (iv) iv.value = String(window._autoBackupSettings.intervalMinutes);
+            const fn = document.getElementById('auto-backup-filename'); if (fn) fn.value = window._autoBackupSettings.filename || '';
+            const modeNew = document.getElementById('auto-backup-mode-new'); const modeReuse = document.getElementById('auto-backup-mode-reuse');
+            if (modeNew && modeReuse) { if (window._autoBackupSettings.mode === 'reuse') modeReuse.checked = true; else modeNew.checked = true; }
+        }
+
+        function saveAutoBackupSettings() {
+            try {
+                const en = document.getElementById('auto-backup-enabled'); window._autoBackupSettings.enabled = !!(en && en.checked);
+                const iv = document.getElementById('auto-backup-interval'); window._autoBackupSettings.intervalMinutes = parseInt(iv ? iv.value : 60) || 60;
+                const fn = document.getElementById('auto-backup-filename'); window._autoBackupSettings.filename = (fn && fn.value.trim()) ? fn.value.trim() : 'acil_takip_yedek.json';
+                const modeNew = document.getElementById('auto-backup-mode-new'); window._autoBackupSettings.mode = (modeNew && modeNew.checked) ? 'new' : 'reuse';
+                localStorage.setItem('autoBackupSettings', JSON.stringify(window._autoBackupSettings));
+            } catch (e) { console.warn('saveAutoBackupSettings', e); }
+        }
+
+        function startAutoBackup() {
+            stopAutoBackup();
+            saveAutoBackupSettings();
+            if (!window._autoBackupSettings.enabled) { showNotification('Otomatik yedekleme devre dışı.', 'info'); return; }
+            const mins = window._autoBackupSettings.intervalMinutes || 60;
+            const ms = mins * 60 * 1000;
+            window._autoBackupTimer = setInterval(() => { performAutoBackup(); }, ms);
+            showNotification(`✅ Otomatik yedekleme başlatıldı (${mins} dakika aralıklarla).`, 'success');
+        }
+
+        function stopAutoBackup() {
+            if (window._autoBackupTimer) { clearInterval(window._autoBackupTimer); window._autoBackupTimer = null; showNotification('⏸️ Otomatik yedekleme durduruldu.', 'info'); }
+        }
+
+        function performAutoBackup() {
+            try {
+                const json = prepareExportJsonString();
+                let filename = 'acil_takip_yedek_' + (new Date()).toISOString().replace(/[:.]/g,'-') + '.json';
+                if (window._autoBackupSettings.mode === 'reuse') {
+                    const last = localStorage.getItem('lastExportFilename');
+                    if (last) filename = last;
+                    else filename = window._autoBackupSettings.filename || filename;
+                } else {
+                    // if user provided a filename template, use it (or fallback to timestamped)
+                    const fn = window._autoBackupSettings.filename;
+                    filename = fn && fn.trim() ? fn.trim() : filename;
+                    // if using 'new' ensure uniqueness by suffixing timestamp
+                    const nameParts = filename.split('.');
+                    if (nameParts.length > 1) {
+                        const ext = nameParts.pop();
+                        const base = nameParts.join('.');
+                        filename = `${base}_${(new Date()).toISOString().replace(/[:.]/g,'-')}.${ext}`;
+                    } else {
+                        filename = `${filename}_${(new Date()).toISOString().replace(/[:.]/g,'-')}`;
+                    }
+                }
+                downloadFile(json, filename);
+                recordLastExportFilename(filename);
+                showNotification(`✅ Otomatik yedekleme tamamlandı: ${filename}`, 'success');
+            } catch (e) {
+                console.error('performAutoBackup hata', e);
+                showNotification('❌ Otomatik yedekleme başarısız oldu.', 'error');
+            }
         }
 
         /**
@@ -4271,13 +4586,22 @@
 
             if (scoringSystems.length === 0) {
                 scoringSystems = [
-                    { name: "HEART Skoru", diagnosis: "Akut Koroner Sendrom" }, { name: "TIMI Skoru", diagnosis: "Akut Koroner Sendrom" },
+                    { name: "HEART Skoru", diagnosis: "Akut Koroner Sendrom" }, { name: "EDACS Skoru", diagnosis: "Akut Koroner Sendrom" }, { name: "TIMI Skoru", diagnosis: "Akut Koroner Sendrom" },
                     { name: "Wells Skoru (PE)", diagnosis: "Pulmoner Emboli" }, { name: "PERC Kuralı", diagnosis: "Pulmoner Emboli" },
                     { name: "NIHSS", diagnosis: "İskemik İnme" }, { name: "qSOFA", diagnosis: "Sepsis/Septik Şok" },
                     { name: "CURB-65", diagnosis: "Pnömoni" }, { name: "Glasgow-Blatchford Skoru", diagnosis: "Üst GIS Kanama" }
                 ];
                 localStorage.setItem('scoringSystems', JSON.stringify(scoringSystems));
             }
+
+            // Eğer mevcut scoringSystems kaydında EDACS yoksa ekleyelim (güncelleme sonrası uyumluluk)
+            try {
+                if (!scoringSystems.some(s => s.name === 'EDACS Skoru' && s.diagnosis === 'Akut Koroner Sendrom')) {
+                    scoringSystems.push({ name: 'EDACS Skoru', diagnosis: 'Akut Koroner Sendrom' });
+                    localStorage.setItem('scoringSystems', JSON.stringify(scoringSystems));
+                    console.info('EDACS varsayılan skor listesine eklendi.');
+                }
+            } catch (e) { console.warn('EDACS ekleme hatası', e); }
 
             if (testTemplates.length === 0) {
                 testTemplates = [
@@ -4325,6 +4649,19 @@
             if (testCheckInterval === null) {
                 testCheckInterval = setInterval(checkTestTimings, 30000); 
             }
+
+            // Auto-backup: yükle ve UI olaylarını bağla
+            try {
+                loadAutoBackupSettings();
+                const abs = document.getElementById('auto-backup-start'); if (abs) abs.addEventListener('click', startAutoBackup);
+                const abo = document.getElementById('auto-backup-stop'); if (abo) abo.addEventListener('click', stopAutoBackup);
+                const abn = document.getElementById('auto-backup-now'); if (abn) abn.addEventListener('click', performAutoBackup);
+                const abe = document.getElementById('auto-backup-enabled'); if (abe) abe.addEventListener('change', () => { saveAutoBackupSettings(); });
+                // Eğer kullanıcı kaydına göre etkinse otomatik başlat
+                if (window._autoBackupSettings && window._autoBackupSettings.enabled) {
+                    startAutoBackup();
+                }
+            } catch (e) { console.warn('auto-backup init hata:', e); }
         }
 
         // --- Event Listener Bağlantıları ---
