@@ -286,10 +286,35 @@
         .collapsible-content { display:none; padding:0 0 8px 0; }
         .collapsible.open .collapsible-content { display:block; }
 
+        /* Simple slider style (clean, like Windows volume control) */
+        .vital-row { display:flex; align-items:center; gap:10px; }
+        .vital-label { width:140px; font-weight:600; font-size:0.95rem; }
+        .slider-wrapper { flex:1; display:flex; align-items:center; gap:8px; }
+        .vital-slider { -webkit-appearance:none; appearance:none; width:100%; height:10px; border-radius:6px; background:#e5e7eb; outline:none; }
+        .vital-slider::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:50%; background:#2563eb; box-shadow:0 2px 6px rgba(37,99,235,0.3); cursor:pointer; }
+        .vital-value { min-width:64px; text-align:center; font-weight:700; background:#fff; border-radius:6px; padding:6px 8px; border:1px solid #e6e6e6; }
+        .vital-slider.filled { background: linear-gradient(90deg, #2563eb var(--pct,0%), #e5e7eb var(--pct,0%)); }
+
         /* Complaint presets popup */
         .complaint-presets { position: absolute; z-index:60; background: #fff; border:1px solid #e5e7eb; border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,0.12); padding:8px; min-width:200px; }
         .complaint-presets button { display:block; width:100%; text-align:left; padding:6px 8px; border-radius:6px; background:transparent; border:none; cursor:pointer; }
         .complaint-presets button:hover { background:#f3f4f6; }
+
+        /* Mic button active state */
+        .mic-btn { background: transparent; border: none; cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+        .mic-btn.active { background: #fee2e2; color: #b91c1c; }
+        .mic-indicator { display:inline-flex; padding:4px 6px; border-radius:8px; background: rgba(37,99,235,0.06); border:1px solid rgba(37,99,235,0.08); }
+        .mic-dot { width:10px; height:10px; background:#ef4444; border-radius:999px; box-shadow:0 0 8px rgba(239,68,68,0.6); animation: mic-blink 1s infinite; }
+        @keyframes mic-blink { 0%{opacity:1} 50%{opacity:0.25} 100%{opacity:1} }
+        .mic-wave { display:inline-flex; gap:3px; align-items:flex-end; height:16px; }
+        .mic-wave .bar { width:4px; background:#2563eb; border-radius:2px; transform-origin:bottom; animation: wave 800ms infinite ease-in-out; }
+        .mic-wave .b1 { animation-delay: 0ms; }
+        .mic-wave .b2 { animation-delay: 120ms; }
+        .mic-wave .b3 { animation-delay: 240ms; }
+        .mic-wave .b4 { animation-delay: 360ms; }
+        .mic-wave .b5 { animation-delay: 480ms; }
+        @keyframes wave { 0%{transform:scaleY(0.4)} 50%{transform:scaleY(1)} 100%{transform:scaleY(0.4)} }
+        .mic-small-btn { background:transparent; border:none; cursor:pointer; font-size:12px; padding:4px; border-radius:6px; }
 
         /* Multi-select patient cards */
         .patient-card.selected-card { outline: 3px solid #2563eb; box-shadow: 0 6px 18px rgba(37,99,235,0.12); }
@@ -2276,119 +2301,35 @@
         
         // Issue 5: İnteraktif Vital Girişi için yardımcı fonksiyon
         function setupInteractiveVitals() {
-            const inputs = document.querySelectorAll('.interactive-input');
-            inputs.forEach(input => {
-                if (input.dataset.listenersAdded) return;
-                input.dataset.listenersAdded = 'true';
-                const min = parseFloat(input.dataset.min);
-                const max = parseFloat(input.dataset.max);
-                const step = parseFloat(input.dataset.step) || 1;
-                const isFloat = step % 1 !== 0;
-                const range = max - min; // Total range (e.g., 42 - 30 = 12 for temp)
+            const sliders = document.querySelectorAll('.vital-slider');
+            sliders.forEach(slider => {
+                if (slider.dataset.listenersAdded) return;
+                slider.dataset.listenersAdded = 'true';
 
-                // Debounce/save control
-                const SAVE_DEBOUNCE_MS = 300;
-                input._vitalSaveTimer = null;
-                const scheduleSave = () => {
-                    if (input._vitalSaveTimer) clearTimeout(input._vitalSaveTimer);
-                    input._vitalSaveTimer = setTimeout(() => { window.calculateAndSaveVitals(false); input._vitalSaveTimer = null; }, SAVE_DEBOUNCE_MS);
+                const min = parseFloat(slider.min || slider.getAttribute('min')) || 0;
+                const max = parseFloat(slider.max || slider.getAttribute('max')) || 100;
+
+                const display = document.getElementById(slider.id + '-display');
+                const updateDisplay = (val) => {
+                    if (display) display.textContent = val;
+                    const pct = ((parseFloat(val) - min) / (max - min)) * 100;
+                    slider.style.setProperty('--pct', pct + '%');
+                    slider.classList.add('filled');
+                    slider.style.background = `linear-gradient(90deg, #2563eb ${pct}%, #e5e7eb ${pct}%)`;
                 };
 
-                const updateValueByPosition = (clientX) => {
-                    // Get input's position and width on screen
-                    const rect = input.getBoundingClientRect();
-                    const inputLeft = rect.left;
-                    const inputWidth = rect.width;
-                    
-                    // Calculate position percentage (0 to 1)
-                    let posPercent = (clientX - inputLeft) / inputWidth;
-                    posPercent = Math.max(0, Math.min(1, posPercent)); // Clamp to 0-1
-                    
-                    // Calculate value based on position
-                    let newValue = min + (range * posPercent);
-                    
-                    // Apply step rounding
-                    newValue = Math.round(newValue / step) * step;
-                    
-                    // Apply min/max constraints
-                    if (newValue < min) newValue = min;
-                    if (newValue > max) newValue = max;
-                    
-                    // Update input value
-                    input.value = isFloat ? newValue.toFixed(1) : Math.round(newValue);
-                    
-                    // Don't save on every move — schedule a debounced save
-                    scheduleSave();
-                };
+                // initialize
+                updateDisplay(slider.value);
 
-                // Wheel: schedule a debounced save (so fast wheel doesn't cause immediate re-render)
-                input.addEventListener('wheel', (e) => {
-                    e.preventDefault();
-                    let currentValue = parseFloat(input.value) || min;
-                    let newValue = e.deltaY < 0 ? currentValue + step : currentValue - step;
-                    if (newValue < min) newValue = min;
-                    if (newValue > max) newValue = max;
-                    input.value = isFloat ? newValue.toFixed(1) : Math.round(newValue);
-                    scheduleSave();
-                }, { passive: false });
-
-                // Touch drag - position-based value mapping
-                input.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    const touch = e.touches[0];
-                    updateValueByPosition(touch.clientX);
-                }, { passive: false });
-
-                input.addEventListener('touchmove', (e) => {
-                    e.preventDefault();
-                    const touch = e.touches[0];
-                    updateValueByPosition(touch.clientX);
-                }, { passive: false });
-
-                input.addEventListener('touchend', (e) => { 
-                    e.preventDefault(); 
-                    // On touchend save immediately (cancel debounce and save now)
-                    if (input._vitalSaveTimer) { clearTimeout(input._vitalSaveTimer); input._vitalSaveTimer = null; }
-                    window.calculateAndSaveVitals(false);
-                }, { passive: false });
-
-                // Mouse drag - position-based value mapping
-                let isMouseDown = false;
-                
-                const handleMouseDown = (e) => {
-                    e.preventDefault();
-                    isMouseDown = true;
-                    updateValueByPosition(e.clientX);
-                };
-                
-                const handleMouseMove = (e) => {
-                    if (!isMouseDown) return;
-                    updateValueByPosition(e.clientX);
-                };
-                
-                const handleMouseUp = (e) => {
-                    if (isMouseDown) {
-                        isMouseDown = false;
-                        // finalize save immediately on mouseup
-                        if (input._vitalSaveTimer) { clearTimeout(input._vitalSaveTimer); input._vitalSaveTimer = null; }
-                        window.calculateAndSaveVitals(false);
-                    }
-                };
-                
-                input.addEventListener('mousedown', handleMouseDown);
-                input.addEventListener('mouseenter', () => {
-                    document.addEventListener('mousemove', handleMouseMove);
-                    document.addEventListener('mouseup', handleMouseUp);
+                // live update while dragging
+                slider.addEventListener('input', (e) => {
+                    updateDisplay(e.target.value);
                 });
-                input.addEventListener('mouseleave', () => {
-                    document.removeEventListener('mousemove', handleMouseMove);
-                    document.removeEventListener('mouseup', handleMouseUp);
-                    if (isMouseDown) {
-                        isMouseDown = false;
-                        // user left the element while dragging: finalize save
-                        if (input._vitalSaveTimer) { clearTimeout(input._vitalSaveTimer); input._vitalSaveTimer = null; }
-                        window.calculateAndSaveVitals(false);
-                    }
+
+                // save when user releases (change fires on release for range inputs)
+                slider.addEventListener('change', (e) => {
+                    updateDisplay(e.target.value);
+                    try { window.calculateAndSaveVitals(false); } catch (err) { console.warn('calculateAndSaveVitals hata:', err); }
                 });
             });
         }
@@ -2517,62 +2458,62 @@
                                 <button class="collapsible-toggle" aria-expanded="false">▸</button>
                             </div>
                             <div class="collapsible-content">
-                                <div class="grid grid-cols-2 gap-2 bg-blue-50 p-3 rounded-lg">
-                                    <div>
-                                        <label class="text-xs font-semibold text-gray-600">🌡️ Ateş (°C)</label>
-                                        <input type="number" id="detail-temp" 
-                                            value="${selectedPatient.vitals_temp || DEFAULT_VITALS.vitals_temp}"
-                                            onchange="calculateAndSaveVitals()"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="0.1" data-min="30" data-max="42">
+                                <div class="space-y-3 bg-blue-50 p-3 rounded-lg">
+                                    <div class="vital-row">
+                                        <div class="vital-label">🌡️ Ateş (°C)</div>
+                                        <div class="slider-wrapper">
+                                            <input id="detail-temp" class="vital-slider" type="range" min="30" max="42" step="0.1" value="${selectedPatient.vitals_temp || DEFAULT_VITALS.vitals_temp}" />
+                                            <div id="detail-temp-display" class="vital-value">${selectedPatient.vitals_temp || DEFAULT_VITALS.vitals_temp}</div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-gray-600">💓 Nabız (/dk)</label>
-                                        <input type="number" id="detail-pulse" 
-                                            value="${selectedPatient.vitals_pulse || DEFAULT_VITALS.vitals_pulse}"
-                                            onchange="calculateAndSaveVitals()"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="5" data-min="20" data-max="200">
+                                    <div class="vital-row">
+                                        <div class="vital-label">💓 Nabız (/dk)</div>
+                                        <div class="slider-wrapper">
+                                            <input id="detail-pulse" class="vital-slider" type="range" min="0" max="250" step="1" value="${selectedPatient.vitals_pulse || DEFAULT_VITALS.vitals_pulse}" />
+                                            <div id="detail-pulse-display" class="vital-value">${selectedPatient.vitals_pulse || DEFAULT_VITALS.vitals_pulse}</div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-gray-600">💨 Sistolik TA (mmHg)</label>
-                                        <input type="number" id="detail-bp-sys" 
-                                            value="${selectedPatient.vitals_bp_systolic || DEFAULT_VITALS.vitals_bp_systolic}"
-                                            onchange="calculateAndSaveVitals()"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="10" data-min="50" data-max="300">
+                                    <div class="vital-row">
+                                        <div class="vital-label">💨 Sistolik TA (mmHg)</div>
+                                        <div class="slider-wrapper">
+                                            <input id="detail-bp-sys" class="vital-slider" type="range" min="40" max="250" step="1" value="${selectedPatient.vitals_bp_systolic || DEFAULT_VITALS.vitals_bp_systolic}" />
+                                            <div id="detail-bp-sys-display" class="vital-value">${selectedPatient.vitals_bp_systolic || DEFAULT_VITALS.vitals_bp_systolic}</div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-gray-600">💨 Diastol TA (mmHg)</label>
-                                        <input type="number" id="detail-bp-dia" 
-                                            value="${selectedPatient.vitals_bp_diastolic || DEFAULT_VITALS.vitals_bp_diastolic}"
-                                            onchange="calculateAndSaveVitals()"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="10" data-min="30" data-max="200">
+                                    <div class="vital-row">
+                                        <div class="vital-label">💨 Diastol TA (mmHg)</div>
+                                        <div class="slider-wrapper">
+                                            <input id="detail-bp-dia" class="vital-slider" type="range" min="30" max="200" step="1" value="${selectedPatient.vitals_bp_diastolic || DEFAULT_VITALS.vitals_bp_diastolic}" />
+                                            <div id="detail-bp-dia-display" class="vital-value">${selectedPatient.vitals_bp_diastolic || DEFAULT_VITALS.vitals_bp_diastolic}</div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-gray-600">🫁 Solunum (/dk)</label>
-                                        <input type="number" id="detail-resp" 
-                                            value="${selectedPatient.vitals_resp_rate || DEFAULT_VITALS.vitals_resp_rate}"
-                                            onchange="calculateAndSaveVitals()"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="2" data-min="4" data-max="40">
+                                    <div class="vital-row">
+                                        <div class="vital-label">🫁 Solunum (/dk)</div>
+                                        <div class="slider-wrapper">
+                                            <input id="detail-resp" class="vital-slider" type="range" min="4" max="40" step="1" value="${selectedPatient.vitals_resp_rate || DEFAULT_VITALS.vitals_resp_rate}" />
+                                            <div id="detail-resp-display" class="vital-value">${selectedPatient.vitals_resp_rate || DEFAULT_VITALS.vitals_resp_rate}</div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-gray-600">🫁 SpO₂ (%)</label>
-                                        <input type="number" id="detail-spo2" 
-                                            value="${selectedPatient.vitals_spo2 || DEFAULT_VITALS.vitals_spo2}"
-                                            onchange="calculateAndSaveVitals()"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="1" data-min="70" data-max="100">
+                                    <div class="vital-row">
+                                        <div class="vital-label">🫁 SpO₂ (%)</div>
+                                        <div class="slider-wrapper">
+                                            <input id="detail-spo2" class="vital-slider" type="range" min="70" max="100" step="1" value="${selectedPatient.vitals_spo2 || DEFAULT_VITALS.vitals_spo2}" />
+                                            <div id="detail-spo2-display" class="vital-value">${selectedPatient.vitals_spo2 || DEFAULT_VITALS.vitals_spo2}</div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-gray-600">🧠 GCS (15)</label>
-                                        <input type="number" id="detail-gcs" 
-                                            value="${selectedPatient.vitals_gcs || DEFAULT_VITALS.vitals_gcs}"
-                                            onchange="calculateAndSaveVitals()"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="1" data-min="3" data-max="15">
+                                    <div class="vital-row">
+                                        <div class="vital-label">🧠 GCS (15)</div>
+                                        <div class="slider-wrapper">
+                                            <input id="detail-gcs" class="vital-slider" type="range" min="3" max="15" step="1" value="${selectedPatient.vitals_gcs || DEFAULT_VITALS.vitals_gcs}" />
+                                            <div id="detail-gcs-display" class="vital-value">${selectedPatient.vitals_gcs || DEFAULT_VITALS.vitals_gcs}</div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="text-xs font-semibold text-gray-600">🍬 Kan Şekeri (mg/dL)</label>
-                                        <input type="number" id="detail-glucose" 
-                                            value="${selectedPatient.vitals_glucose || DEFAULT_VITALS.vitals_glucose}"
-                                            onchange="calculateAndSaveVitals()"
-                                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm interactive-input" data-step="5" data-min="40" data-max="500">
+                                    <div class="vital-row">
+                                        <div class="vital-label">🍬 Kan Şekeri (mg/dL)</div>
+                                        <div class="slider-wrapper">
+                                            <input id="detail-glucose" class="vital-slider" type="range" min="40" max="500" step="5" value="${selectedPatient.vitals_glucose || DEFAULT_VITALS.vitals_glucose}" />
+                                            <div id="detail-glucose-display" class="vital-value">${selectedPatient.vitals_glucose || DEFAULT_VITALS.vitals_glucose}</div>
+                                        </div>
                                     </div>
                                 </div>
                                 <button onclick="calculateAndSaveVitals()" 
@@ -2801,6 +2742,23 @@
                                                         class="template-icon text-gray-500 hover:text-gray-700 text-xs flex-shrink-0" title="Bu Bölümü Kopyala">
                                                         📋
                                                     </button>
+                                                    <button onclick="toggleSpeechToText('detail-anam-${section}', event)" 
+                                                        data-mic-target="detail-anam-${section}"
+                                                        class="template-icon mic-btn text-green-600 hover:text-green-800 text-xs flex-shrink-0" title="Konuşarak yaz">
+                                                        🎤
+                                                    </button>
+                                                    <span id="mic-indicator-detail-anam-${section}" class="mic-indicator hidden" style="display:none; align-items:center; gap:6px;">
+                                                        <span class="mic-dot" aria-hidden="true"></span>
+                                                        <span class="mic-wave" aria-hidden="true">
+                                                            <span class="bar b1"></span>
+                                                            <span class="bar b2"></span>
+                                                            <span class="bar b3"></span>
+                                                            <span class="bar b4"></span>
+                                                            <span class="bar b5"></span>
+                                                        </span>
+                                                        <button class="mic-small-btn" onclick="stopSpeechToText('detail-anam-${section}'); event.stopPropagation();" title="Durdur">⏹</button>
+                                                        <button class="mic-small-btn" onclick="clearAnamnesisField('detail-anam-${section}'); event.stopPropagation();" title="Temizle">✖</button>
+                                                    </span>
                                                 </div>
                                             </div>
                                             <textarea id="detail-anam-${section}" 
@@ -3400,6 +3358,108 @@
             
             updatePatientInLocalStorage(selectedPatient);
             showNotification('✅ Anamnez bilgileri kaydedildi!', 'success');
+        };
+
+        // Simple Speech-to-Text (Web Speech API) helper for anamnesis fields
+        window._speechRec = null;
+        window._speechTarget = null;
+        window._speechBaseText = '';
+        window.toggleSpeechToText = (fieldId, evt) => {
+            evt && evt.stopPropagation();
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                showNotification('Tarayıcınız konuşma tanımayı desteklemiyor (Web Speech API).', 'error');
+                return;
+            }
+            // If already active for the same field, stop it
+            if (window._speechRec && window._speechTarget === fieldId) {
+                try { window._speechRec.stop(); } catch(e){}
+                return;
+            }
+            // If another field is active, stop it first
+            if (window._speechRec) {
+                try { window._speechRec.stop(); } catch(e){}
+            }
+
+            const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+            try {
+                const rec = new SpeechRec();
+                rec.lang = 'tr-TR';
+                rec.interimResults = true;
+                rec.maxAlternatives = 1;
+
+                const btn = document.querySelector(`[data-mic-target="${fieldId}"]`);
+                const textarea = document.getElementById(fieldId);
+                if (!textarea) { showNotification('Hedef alan bulunamadı.', 'error'); return; }
+
+                window._speechRec = rec;
+                window._speechTarget = fieldId;
+                window._speechBaseText = textarea.value || '';
+                if (btn) btn.classList.add('active');
+                // show indicator
+                const indicator = document.getElementById('mic-indicator-' + fieldId);
+                if (indicator) { indicator.style.display = 'inline-flex'; }
+
+                let finalText = '';
+                rec.onresult = (e) => {
+                    let interim = '';
+                    for (let i = 0; i < e.results.length; i++) {
+                        const res = e.results[i];
+                        if (res.isFinal) finalText += res[0].transcript;
+                        else interim += res[0].transcript;
+                    }
+                    // Compose text: base + final + interim
+                    const combined = (window._speechBaseText.trim() ? window._speechBaseText.trim() + '\n' : '') + (finalText + interim).trim();
+                    textarea.value = combined;
+                };
+
+                rec.onerror = (err) => {
+                    console.warn('SpeechRecognition error', err);
+                    showNotification('Ses tanıma hatası: ' + (err.error || err.message || ''), 'error');
+                };
+
+                rec.onend = () => {
+                    // finalize
+                    if (btn) btn.classList.remove('active');
+                    const indicator2 = document.getElementById('mic-indicator-' + fieldId);
+                    if (indicator2) { indicator2.style.display = 'none'; }
+                    // ensure textarea contains base + finalText
+                    const finalCombined = (window._speechBaseText.trim() ? window._speechBaseText.trim() + '\n' : '') + (finalText || '').trim();
+                    if (finalCombined.trim()) textarea.value = finalCombined;
+                    // cleanup
+                    window._speechRec = null;
+                    window._speechTarget = null;
+                    window._speechBaseText = '';
+                    // automatically save anamnesis
+                    try { window.saveDetailAnamnesis(); } catch (e) { console.warn(e); }
+                };
+
+                rec.start();
+                showNotification('🎙️ Konuşma kaydı başladı. Konuşun, bitince durdurun veya tekrar butona basın.', 'info');
+            } catch (e) {
+                console.warn('Konuşma başlatılamadı', e);
+                showNotification('Ses tanıma başlatılamadı: ' + (e.message || ''), 'error');
+            }
+        };
+
+        window.stopSpeechToText = (fieldId) => {
+            if (window._speechRec && window._speechTarget === fieldId) {
+                try { window._speechRec.stop(); } catch(e) { console.warn(e); }
+            }
+            // clear UI states
+            const btn = document.querySelector(`[data-mic-target="${fieldId}"]`);
+            if (btn) btn.classList.remove('active');
+            const indicator = document.getElementById('mic-indicator-' + fieldId);
+            if (indicator) indicator.style.display = 'none';
+        };
+
+        window.clearAnamnesisField = (fieldId) => {
+            const ta = document.getElementById(fieldId);
+            if (!ta) return;
+            if (!confirm('Bu kutucuktaki metin temizlensin mi?')) return;
+            ta.value = '';
+            // save change
+            try { window.saveDetailAnamnesis(); } catch(e) { console.warn(e); }
+            showNotification('✅ Metin temizlendi.', 'success');
         };
 
         // Madde 3: Anamnez görünümünden düzenleme ve kaydetme
