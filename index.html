@@ -625,71 +625,79 @@
     </div>
    </div>
   </div>
-  <!-- Barcode Scan Modal (Geliştirilmiş) -->
-  <div id="scan-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-   <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90%] overflow-y-auto">
-    <div class="flex justify-between items-center mb-4">
-     <h3 class="text-xl font-bold">📷 Hasta Ekleme (Barkod / Manuel Giriş)</h3>
-     <button id="scan-cancel" class="px-3 py-1 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 text-sm">✕</button>
-    </div>
+    <!-- Hasta Ekleme Modal (Fotoğraf tabanlı OCR + Manuel) -->
+    <div id="scan-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+     <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90%] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+         <h3 class="text-xl font-bold">📷 Hasta Ekle (Fotoğraf ile otomatik doldurma veya Manuel)</h3>
+         <button id="scan-cancel" class="px-3 py-1 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 text-sm">✕</button>
+        </div>
 
-    <!-- Sekme seçimi -->
-    <div class="flex gap-2 mb-4 border-b">
-     <button id="tab-hid" class="px-4 py-2 font-semibold text-indigo-600 border-b-2 border-indigo-600">🔌 HID Okuyucu</button>
-     <button id="tab-camera" class="px-4 py-2 font-semibold text-gray-600 hover:text-gray-800">📸 Kamera (QR/Barkod)</button>
-     <button id="tab-manual" class="px-4 py-2 font-semibold text-gray-600 hover:text-gray-800">✍️ Manuel</button>
-    </div>
+        <div class="flex gap-2 mb-4 border-b">
+         <button id="tab-photo" class="px-4 py-2 font-semibold text-indigo-600 border-b-2 border-indigo-600">📸 Fotoğraf</button>
+         <button id="tab-manual" class="px-4 py-2 font-semibold text-gray-600 hover:text-gray-800">✍️ Manuel</button>
+        </div>
 
-    <!-- HID / Klavye Okuyucu Sekmesi -->
-    <div id="scan-tab-hid" class="space-y-3">
-     <p class="text-sm text-gray-600">Barkod okuyucunuzu tetikleyin. Aşağıdaki alana odaklanmış olup, barkod karakterleri otomatik gönderilecektir.</p>
-     <input id="hid-buffer" type="text" placeholder="Barkod okuyucu burada karakterleri gönderiyor..." class="w-full px-4 py-3 border-2 border-indigo-400 rounded-lg focus:outline-none focus:border-indigo-600 text-lg" autofocus>
-     <div id="hid-parsed" class="p-3 bg-indigo-50 rounded-lg hidden">
-      <p class="text-sm font-semibold text-indigo-700">Ayrıştırılan bilgiler:</p>
-      <div id="hid-parsed-content" class="text-sm text-gray-700 mt-2"></div>
+        <!-- Fotoğraf Sekmesi -->
+        <div id="scan-tab-photo" class="space-y-3">
+         <p class="text-sm text-gray-600">Telefon kamerasıyla barkod/etiket/fotoğraf çekin veya galeriden yükleyin. Yapay zeka fotoğrafı analiz edip formu dolduracaktır.</p>
+         <div id="photo-actions" class="grid grid-cols-2 gap-2">
+            <button id="camera-start" class="px-3 py-2 bg-blue-600 text-white rounded-lg">📷 Kamera ile çek</button>
+            <label class="px-3 py-2 bg-gray-100 border rounded-lg text-center cursor-pointer">
+                📁 Galeriden yükle
+                <input id="photo-file-input" type="file" accept="image/*" class="hidden">
+            </label>
+         </div>
+
+         <div id="camera-preview" class="bg-gray-900 rounded-lg overflow-hidden relative" style="height:280px; display:none">
+            <video id="camera-stream" autoplay playsinline style="width:100%; height:100%; object-fit:cover"></video>
+            <button id="camera-capture" class="absolute bottom-3 left-1/2 -translate-x-1/2 px-4 py-2 bg-white text-black rounded-full">📸 Çek</button>
+         </div>
+
+         <div id="photo-preview-img" class="rounded-lg overflow-hidden" style="display:none">
+            <img id="preview-img" src="" alt="Preview" style="width:100%; height:auto; display:block" />
+         </div>
+
+         <div class="flex gap-2">
+            <button id="analyze-photo" class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg">Yapay Zeka ile Analiz Et</button>
+            <button id="clear-photo" class="px-4 py-2 bg-gray-200 rounded-lg">Temizle</button>
+         </div>
+
+         <div id="ocr-result" class="p-3 mt-2 bg-gray-50 rounded hidden">
+            <p class="font-semibold">Algılanan Bilgiler</p>
+            <div id="ocr-result-content" class="text-sm text-gray-700 mt-2"></div>
+         </div>
+        </div>
+
+        <!-- Manuel Giriş Sekmesi -->
+        <div id="scan-tab-manual" class="space-y-3 hidden">
+         <input id="scan-name" type="text" placeholder="Hasta Adı Soyadı" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+         <input id="scan-file-number" type="text" placeholder="Dosya Numarası" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+         <input id="scan-age" type="number" placeholder="Yaş" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+         <select id="scan-gender" class="w-full px-3 py-2 border border-gray-300 rounded-lg"> 
+            <option value="">Cinsiyet Seçin</option> 
+            <option value="Erkek">Erkek</option> 
+            <option value="Kadın">Kadın</option> 
+         </select>
+         <select id="scan-area" class="w-full px-3 py-2 border border-gray-300 rounded-lg"> 
+            <option value="">Alan Seçin (Opsiyonel)</option>
+            <option value="Resüsitasyon">Resüsitasyon</option>
+            <option value="Kırmızı">Kırmızı Alan</option>
+            <option value="Sarı">Sarı Alan</option>
+            <option value="Yeşil">Yeşil Alan</option>
+            <option value="Müşahade">Müşahade</option>
+            <option value="Diğer">Diğer</option>
+         </select>
+         <input id="scan-bed-number" type="text" placeholder="Oda/Yatak No (Opsiyonel)" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+        <textarea id="scan-complaint" placeholder="Geliş şikayeti (Opsiyonel)" class="w-full px-4 py-2 border border-gray-300 rounded-lg resize-y text-sm" rows="2"></textarea>
+        </div>
+
+        <!-- Butonlar -->
+        <div class="flex gap-3 mt-6">
+         <button id="scan-confirm" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold">✅ Ekle</button>
+        </div>
      </div>
-     <button id="hid-use-parsed" class="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 hidden">Ayrıştırılan verileri kullan ve ileri git →</button>
     </div>
-
-    <!-- Kamera Sekmesi -->
-    <div id="scan-tab-camera" class="space-y-3 hidden">
-     <p class="text-sm text-gray-600">Cihazınızda kamera izni vermiş olmalısınız. QR kod veya barkod okut.</p>
-     <div id="camera-container" class="bg-gray-900 rounded-lg overflow-hidden relative" style="height: 300px;">
-      <video id="camera-stream" style="width: 100%; height: 100%; object-fit: cover;"></video>
-      <div id="camera-status" class="absolute top-2 right-2 px-3 py-1 bg-red-600 text-white rounded-lg text-sm">Kamera başlatılıyor...</div>
-     </div>
-     <button id="camera-start" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">📸 Kamera Başlat</button>
-    </div>
-
-    <!-- Manuel Giriş Sekmesi -->
-    <div id="scan-tab-manual" class="space-y-3 hidden">
-     <input id="scan-name" type="text" placeholder="Hasta Adı Soyadı" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
-     <input id="scan-file-number" type="text" placeholder="Dosya Numarası" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
-     <input id="scan-age" type="number" placeholder="Yaş" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
-     <select id="scan-gender" class="w-full px-4 py-2 border border-gray-300 rounded-lg"> 
-      <option value="">Cinsiyet Seçin</option> 
-      <option value="Erkek">Erkek</option> 
-      <option value="Kadın">Kadın</option> 
-     </select>
-     <select id="scan-area" class="w-full px-4 py-2 border border-gray-300 rounded-lg"> 
-      <option value="">Alan Seçin (Opsiyonel)</option>
-      <option value="Resüsitasyon">Resüsitasyon</option>
-      <option value="Kırmızı">Kırmızı Alan</option>
-      <option value="Sarı">Sarı Alan</option>
-      <option value="Yeşil">Yeşil Alan</option>
-      <option value="Müşahade">Müşahade</option>
-      <option value="Diğer">Diğer</option>
-     </select>
-     <input id="scan-bed-number" type="text" placeholder="Oda/Yatak No (Opsiyonel)" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
-    <textarea id="scan-complaint" placeholder="Geliş şikayeti (Opsiyonel)" class="w-full px-4 py-2 border border-gray-300 rounded-lg resize-y text-sm" rows="2"></textarea>
-    </div>
-
-    <!-- Butonlar (Tüm sekmeler için ortaklaştırılmış) -->
-    <div class="flex gap-3 mt-6">
-     <button id="scan-confirm" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold">✅ Ekle</button>
-    </div>
-   </div>
-  </div>
   <!-- Template Modal (Tetkik Şablonu Oluştur) -->
   <div id="template-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
    <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90%] overflow-y-auto">
@@ -4737,286 +4745,205 @@
             }
         });
 
-        // --- Geliştirilmiş Barkod / QR Okuyucu Sistemi ---
-        
-       // --- Geliştirilmiş Barkod / QR Okuyucu Sistemi (Revizyon 3 - Güçlendirilmiş Tarama) ---
+        // --- Fotoğraf tabanlı ekleme / AI OCR entegrasyonu ---
         (function() {
-            let hidBuffer = '';
-            let lastHIDKeyTime = 0;
-            const HID_THRESHOLD = 120;
-            let cameraActive = false;
-            let scannerActive = false;
             let currentStream = null;
-            let videoEl = null; 
-            let animationFrameId = null;
+            let lastCapturedBlob = null;
 
-            // HID Okuyucu: barkod verilerini ayrıştır
-            function parseBarcode(raw) {
-                if (!raw || raw.trim().length === 0) return null;
-                const s = raw.trim();
-                const parts = s.split(/\||,|;|\/|\t|\s{2,}|\s/).map(p => p.trim()).filter(Boolean);
-                let name = '', fileNumber = '', age = '', gender = '';
-                
-                if (parts.length >= 4) {
-                    name = parts[0]; fileNumber = parts[1]; age = parts[2]; gender = parts[3];
-                } else if (parts.length === 3) {
-                    name = parts[0]; fileNumber = parts[1]; age = parts[2];
-                } else if (parts.length === 2) {
-                    name = parts[0]; fileNumber = parts[1];
-                } else if (parts.length === 1) {
-                    if (/^[0-9]{3,}$/.test(parts[0])) {
-                        fileNumber = parts[0];
-                    } else {
-                        name = parts[0];
-                    }
-                }
-                
-                if (!age && name) {
-                    const m = name.match(/(.*?)\s+(\d{1,3})$/);
-                    if (m) { name = m[1]; age = m[2]; }
-                }
-
-                if (gender) {
-                    const g = gender.toLowerCase();
-                    if (g.startsWith('e') || g.startsWith('m') || g === 'male' || g === 'erkek') gender = 'Erkek';
-                    else if (g.startsWith('k') || g.startsWith('f') || g === 'female' || g === 'kadın') gender = 'Kadın';
-                }
-
-                return { name, fileNumber, age, gender };
-            }
-
-            // HID'den ayrıştırılan veriyi göster ve kullan
-            function applyParsedData(parsed) {
-                if (parsed.name) document.getElementById('scan-name').value = parsed.name;
-                if (parsed.fileNumber) document.getElementById('scan-file-number').value = parsed.fileNumber;
-                if (parsed.age && !isNaN(parseInt(parsed.age))) document.getElementById('scan-age').value = parseInt(parsed.age);
-                if (parsed.gender) document.getElementById('scan-gender').value = parsed.gender;
-            }
-
-            // Tab geçişi
-            function switchTab(tabName) {
-                document.getElementById('scan-tab-hid').classList.add('hidden');
-                document.getElementById('scan-tab-camera').classList.add('hidden');
+            function showPhotoTab() {
+                document.getElementById('scan-tab-photo').classList.remove('hidden');
                 document.getElementById('scan-tab-manual').classList.add('hidden');
-                document.getElementById('tab-hid').classList.remove('text-indigo-600', 'border-b-2', 'border-indigo-600');
-                document.getElementById('tab-camera').classList.remove('text-indigo-600', 'border-b-2', 'border-indigo-600');
-                document.getElementById('tab-manual').classList.remove('text-indigo-600', 'border-b-2', 'border-indigo-600');
-
-                if (tabName === 'hid') {
-                    document.getElementById('scan-tab-hid').classList.remove('hidden');
-                    document.getElementById('tab-hid').classList.add('text-indigo-600', 'border-b-2', 'border-indigo-600');
-                    document.getElementById('hid-buffer').focus();
-                } else if (tabName === 'camera') {
-                    document.getElementById('scan-tab-camera').classList.remove('hidden');
-                    document.getElementById('tab-camera').classList.add('text-indigo-600', 'border-b-2', 'border-indigo-600');
-                } else if (tabName === 'manual') {
-                    document.getElementById('scan-tab-manual').classList.remove('hidden');
-                    document.getElementById('tab-manual').classList.add('text-indigo-600', 'border-b-2', 'border-indigo-600');
-                }
-                
-                // Kamera sekmesinden çıkılıyorsa kamerayı durdur
-                if (tabName !== 'camera' && cameraActive) {
-                    stopCameraAndScanning();
-                }
+                document.getElementById('tab-photo').classList.add('text-indigo-600','border-b-2','border-indigo-600');
+                document.getElementById('tab-manual').classList.remove('text-indigo-600','border-b-2','border-indigo-600');
             }
-            
-            // Kamerayı ve tarama döngüsünü durdurur
-            function stopCameraAndScanning() {
-                scannerActive = false;
-                cameraActive = false;
-                if (animationFrameId) {
-                    cancelAnimationFrame(animationFrameId);
-                    animationFrameId = null;
-                }
+            function showManualTab() {
+                document.getElementById('scan-tab-manual').classList.remove('hidden');
+                document.getElementById('scan-tab-photo').classList.add('hidden');
+                document.getElementById('tab-manual').classList.add('text-indigo-600','border-b-2','border-indigo-600');
+                document.getElementById('tab-photo').classList.remove('text-indigo-600','border-b-2','border-indigo-600');
+                stopCamera();
+            }
+
+            function openScanModal() {
+                document.getElementById('scan-modal').classList.remove('hidden');
+                showPhotoTab();
+                // reset previews
+                clearPreview();
+            }
+
+            function stopCamera() {
                 if (currentStream) {
-                    currentStream.getTracks().forEach(track => track.stop());
+                    currentStream.getTracks().forEach(t => t.stop());
                     currentStream = null;
                 }
-                if (videoEl) {
-                    try { videoEl.pause(); videoEl.srcObject = null; } catch(e){}
-                }
-                 document.getElementById('camera-status').textContent = 'Kamera durduruldu';
-                 document.getElementById('camera-status').classList.remove('bg-green-600');
-                 document.getElementById('camera-status').classList.add('bg-red-600');
+                const preview = document.getElementById('camera-preview'); if (preview) preview.style.display = 'none';
+                const status = document.getElementById('camera-status'); if (status) { status.textContent = ''; }
             }
 
-            // jsQR kütüphanesini yükler
-            function ensureJsQRLoaded() {
-                if (window.jsQR && typeof window.jsQR === 'function') {
-                    return Promise.resolve();
+            async function startCamera() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                    currentStream = stream;
+                    const video = document.getElementById('camera-stream');
+                    video.srcObject = stream;
+                    document.getElementById('camera-preview').style.display = 'block';
+                } catch (e) {
+                    showNotification('Kamera açılamadı: ' + (e.message || e), 'error');
                 }
-                return new Promise((resolve, reject) => {
-                    const script = document.createElement('script');
-                    script.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-                    script.onload = () => {
-                        if (window.jsQR && typeof window.jsQR === 'function') {
-                            resolve();
-                        } else {
-                            reject(new Error('window.jsQR tanımlanamadı.'));
-                        }
-                    };
-                    script.onerror = (err) => {
-                        reject(new Error('jsQR CDN yükleme hatası.'));
-                    };
-                    document.head.appendChild(script);
-                });
             }
 
-            // Tarama döngüsünü başlatan ana fonksiyon
-            function startScanning(videoEl, canvas, ctx) {
-                 if (!scannerActive) return;
-                 
-                 try {
-                     // Kameradan yeterli veri gelmiş mi?
-                     if (videoEl.readyState === videoEl.HAVE_ENOUGH_DATA) {
-                         
-                         // Canvas boyutlarını, video çözünürlüğüne veya bir güvenilir varsayılana ayarla (640x480)
-                         const videoWidth = videoEl.videoWidth || 640;
-                         const videoHeight = videoEl.videoHeight || 480;
-                         
-                         if (videoWidth > 0 && videoHeight > 0) {
-                             canvas.width = videoWidth;
-                             canvas.height = videoHeight;
-                             
-                             // Görüntüyü Canvas'a çiz
-                             ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-                             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                             
-                             // jsQR ile tarama yap
-                             const code = window.jsQR(imageData.data, canvas.width, canvas.height, {
-                                 // Bu ayar, yansıma veya ters renkli barkodlar için iyidir
-                                 inversionAttempts: "dontInvert", 
-                             });
-                             
-                             if (code && code.data && code.data.trim().length > 0) {
-                                 console.log('✅ QR BULUNDU:', code.data);
-                                 stopCameraAndScanning();
-                                 const parsed = parseBarcode(code.data);
-                                 applyParsedData(parsed);
-                                 switchTab('manual');
-                                 showNotification('✅ Barkod ayrıştırıldı ve manuel sekmeye aktarıldı!', 'success');
-                                 return; // Başarılı, döngüyü sonlandır
-                             }
-                         }
-                     }
-                 } catch (scanErr) {
-                     // Bu bir donanım veya jsQR hatası olabilir
-                     console.error('Kritik Tarama Hatası:', scanErr);
-                     document.getElementById('camera-status').textContent = 'Kritik tarama hatası (Konsolu kontrol edin)';
-                     stopCameraAndScanning();
-                     showNotification('❌ Tarama sırasında kritik hata oluştu!', 'error');
-                     return; 
-                 }
-                 
-                 // Tarama başarılı olmazsa bir sonraki kareyi iste
-                 animationFrameId = requestAnimationFrame(() => startScanning(videoEl, canvas, ctx));
+            function captureFromCamera() {
+                const video = document.getElementById('camera-stream');
+                if (!video || !video.videoWidth) { showNotification('Kamera hazır değil.', 'error'); return; }
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob((blob) => {
+                    lastCapturedBlob = blob;
+                    previewBlob(blob);
+                }, 'image/jpeg', 0.9);
+                stopCamera();
             }
 
+            function previewBlob(blob) {
+                const url = URL.createObjectURL(blob);
+                const img = document.getElementById('preview-img');
+                img.src = url;
+                document.getElementById('photo-preview-img').style.display = 'block';
+                document.getElementById('ocr-result').classList.add('hidden');
+            }
 
-            // HID Okuyucu: keydown listener'ı (önceki gibi)
-            window.addEventListener('keydown', (e) => {
-                const scanModal = document.getElementById('scan-modal');
-                if (scanModal && scanModal.classList.contains('hidden')) return;
+            function clearPreview() {
+                lastCapturedBlob = null;
+                const img = document.getElementById('preview-img'); if (img) img.src = '';
+                document.getElementById('photo-preview-img').style.display = 'none';
+                document.getElementById('ocr-result').classList.add('hidden');
+                stopCamera();
+                const fileInput = document.getElementById('photo-file-input'); if (fileInput) fileInput.value = '';
+            }
 
-                const hidBufferEl = document.getElementById('hid-buffer');
-                if (document.activeElement !== hidBufferEl && document.activeElement.tagName !== 'INPUT') return;
+            // Stub: User can implement their own AI analysis here
+            async function analyzePhotoWithAI(blob) {
+                // TODO: Connect to your own AI/OCR API here
+                // For now, just notify the user to implement
+                showNotification('📸 Fotoğraf kendi API\'nizle analiz etmek için kodu bağlayın.', 'info');
+                console.log('Photo blob ready for custom AI analysis:', blob);
+                return null;
+            }
 
-                const now = Date.now();
-                if (e.key === 'Shift' || e.key === 'Control' || e.key === 'Alt' || e.key === 'Meta') return;
-
-                if (now - lastHIDKeyTime > HID_THRESHOLD) {
-                    hidBuffer = '';
-                }
-                lastHIDKeyTime = now;
-
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const raw = document.getElementById('hid-buffer').value;
-                    const parsed = parseBarcode(raw);
-                    if (parsed && (parsed.name || parsed.fileNumber || parsed.age)) {
-                        document.getElementById('hid-parsed-content').innerHTML = `
-                            <div><strong>İsim:</strong> ${parsed.name || '—'}</div>
-                            <div><strong>Dosya No:</strong> ${parsed.fileNumber || '—'}</div>
-                            <div><strong>Yaş:</strong> ${parsed.age || '—'}</div>
-                            <div><strong>Cinsiyet:</strong> ${parsed.gender || '—'}</div>
-                        `;
-                        document.getElementById('hid-parsed').classList.remove('hidden');
-                        document.getElementById('hid-use-parsed').classList.remove('hidden');
-                    }
-                }
+            // Event bindings
+            document.getElementById('scan-btn').addEventListener('click', () => {
+                openScanModal();
             });
 
-            // Tab butonları
-            document.getElementById('tab-hid').addEventListener('click', () => switchTab('hid'));
-            document.getElementById('tab-camera').addEventListener('click', () => switchTab('camera'));
-            document.getElementById('tab-manual').addEventListener('click', () => switchTab('manual'));
+            document.getElementById('tab-photo').addEventListener('click', showPhotoTab);
+            document.getElementById('tab-manual').addEventListener('click', showManualTab);
 
-            // HID'de ayrıştırılan veriyi manuel alanlara aktar
-            document.getElementById('hid-use-parsed').addEventListener('click', () => {
-                const raw = document.getElementById('hid-buffer').value;
-                const parsed = parseBarcode(raw);
-                applyParsedData(parsed);
-                switchTab('manual');
-                showNotification('✅ Barkod ayrıştırıldı ve manuel sekmeye aktarıldı!', 'success');
+            document.getElementById('scan-cancel').addEventListener('click', () => {
+                clearPreview();
+                document.getElementById('scan-modal').classList.add('hidden');
             });
 
-            // Kamera QR/Barkod okuma başlat
             document.getElementById('camera-start').addEventListener('click', async () => {
-                if (cameraActive) {
-                    stopCameraAndScanning();
-                    document.getElementById('camera-start').textContent = '📸 Kamera Başlat';
+                await startCamera();
+            });
+
+            document.getElementById('camera-capture').addEventListener('click', () => {
+                captureFromCamera();
+            });
+
+            document.getElementById('photo-file-input').addEventListener('change', (e) => {
+                const f = e.target.files && e.target.files[0];
+                if (!f) return;
+                lastCapturedBlob = f;
+                previewBlob(f);
+            });
+
+            document.getElementById('clear-photo').addEventListener('click', () => {
+                clearPreview();
+            });
+
+            document.getElementById('analyze-photo').addEventListener('click', async () => {
+                try {
+                    if (!lastCapturedBlob) { showNotification('📷 Önce fotoğraf çekin veya yükleyin.', 'info'); return; }
+                    showNotification('🔎 Fotoğraf analiz ediliyor... Lütfen bekleyin.');
+                    const resp = await sendImageToOCR(lastCapturedBlob);
+                    const parsed = interpretOCRResponse(resp);
+                    // Fill fields
+                    if (parsed.name) document.getElementById('scan-name').value = parsed.name;
+                    if (parsed.fileNumber) document.getElementById('scan-file-number').value = parsed.fileNumber;
+                    if (parsed.age && !isNaN(parseInt(parsed.age))) document.getElementById('scan-age').value = parseInt(parsed.age);
+                    if (parsed.gender) document.getElementById('scan-gender').value = (parsed.gender.toString().toLowerCase().startsWith('e') || parsed.gender.toString().toLowerCase().startsWith('m')) ? 'Erkek' : 'Kadın';
+
+                    // Show OCR raw result
+                    const container = document.getElementById('ocr-result-content');
+                    container.innerHTML = `
+                        <div><strong>İsim:</strong> ${parsed.name || '—'}</div>
+                        <div><strong>Dosya No:</strong> ${parsed.fileNumber || '—'}</div>
+                        <div><strong>Yaş:</strong> ${parsed.age || '—'}</div>
+                        <div><strong>Cinsiyet:</strong> ${parsed.gender || '—'}</div>
+                        <div class="text-xs text-gray-500 mt-2">Ham cevap: <pre style="white-space:pre-wrap">${JSON.stringify(resp, null, 2)}</pre></div>
+                    `;
+                    document.getElementById('ocr-result').classList.remove('hidden');
+                    showNotification('✅ Fotoğraf analiz edildi. Alanlar dolduruldu, kontrol edip ekleyin.', 'success');
+                    // switch to manual tab so user can edit before adding
+                    showManualTab();
+                } catch (err) {
+                    console.error('OCR hata', err);
+                    showNotification('❌ Fotoğraf analizi başarısız: ' + (err.message || err), 'error');
+                }
+            });
+
+            document.getElementById('scan-confirm').addEventListener('click', () => {
+                const name = document.getElementById('scan-name').value.trim();
+                const fileNumber = document.getElementById('scan-file-number').value.trim();
+                const age = parseInt(document.getElementById('scan-age').value);
+                const gender = document.getElementById('scan-gender').value;
+                const area = document.getElementById('scan-area').value.trim();
+                const bed = document.getElementById('scan-bed-number').value.trim();
+                const complaint = (document.getElementById('scan-complaint') && document.getElementById('scan-complaint').value) ? document.getElementById('scan-complaint').value.trim() : '';
+
+                if (!name || !fileNumber) {
+                    showNotification('❌ Hasta adı ve Dosya Numarası zorunludur.', 'error');
                     return;
                 }
-                
-                document.getElementById('camera-start').textContent = 'Kamera Başlatılıyor...';
-                document.getElementById('camera-status').textContent = 'Kamera başlatılıyor...';
-                document.getElementById('camera-status').classList.remove('bg-green-600');
-                document.getElementById('camera-status').classList.add('bg-red-600');
 
-                try {
-                    // jsQR kütüphanesini yükle
-                    await ensureJsQRLoaded();
-                    
-                    // Kamera akışını başlat
-                    const constraints = { video: { facingMode: 'environment' } };
-                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                    currentStream = stream; // Stream referansını kaydet
-                    videoEl = document.getElementById('camera-stream'); // videoEl global olarak atandı
-                    
-                    videoEl.muted = true;
-                    videoEl.setAttribute('playsinline', '');
-                    videoEl.srcObject = stream;
-                    
-                    // Video oynamaya başlar
-                    videoEl.play();
-                    
-                    document.getElementById('camera-status').textContent = 'Kamera aktif - Barkod okutun';
-                    document.getElementById('camera-status').classList.remove('bg-red-600');
-                    document.getElementById('camera-status').classList.add('bg-green-600');
-                    document.getElementById('camera-start').textContent = 'Kamerayı Durdur';
-                    cameraActive = true;
-                    scannerActive = true;
-                    
-                    // Tarama için canvas ve context oluştur
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    
-                    // Tarama döngüsünü başlat
-                    // Video'nun oynamaya başlaması için kısa bir gecikme ekleyelim.
-                    setTimeout(() => startScanning(videoEl, canvas, ctx), 100);
+                const newPatient = {
+                    patient_name: name,
+                    file_number: fileNumber,
+                    age: isNaN(age) ? null : age,
+                    gender: gender,
+                    chief_complaint: complaint || '',
+                    discharge_status: 'active',
+                    is_favorite: false,
+                    is_forensic: false,
+                    created_at: new Date().toISOString(),
+                    created_date: new Date().toLocaleDateString('tr-TR'),
+                    news_score: 0,
+                    tests_json: '[]',
+                    area_name: area,
+                    bed_number: bed,
+                    anamnesis_complaint: complaint || '',
+                    anamnesis_history: '',
+                    anamnesis_examination: '',
+                    anamnesis_procedures: '',
+                    anamnesis_decision: '',
+                    favorite_category: ''
+                };
 
-                } catch (err) {
-                    stopCameraAndScanning();
-                    document.getElementById('camera-status').textContent = 'Kamera erişimi reddedildi veya hata oluştu';
-                    document.getElementById('camera-start').textContent = '📸 Kamera Başlat';
-                    showNotification('❌ Kamera erişimi başarısız: ' + err.message, 'error');
+                const result = createPatientInLocalStorage(newPatient);
+                if (result.isOk) {
+                    showNotification(`✅ Yeni hasta eklendi: ${name} (${area} ${bed})`, 'success');
+                    document.getElementById('scan-modal').classList.add('hidden');
+                    // clear inputs
+                    ['scan-name','scan-file-number','scan-age','scan-gender','scan-area','scan-bed-number','scan-complaint'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+                    clearPreview();
+                } else {
+                    showNotification('❌ Hasta eklenirken bir hata oluştu!', 'error');
+                    console.error('Hasta ekleme hatası:', result.error);
                 }
-            });
-
-            // Scan modal kapatıldığında kamerayı durdur
-            document.getElementById('scan-cancel').addEventListener('click', () => {
-                stopCameraAndScanning();
-                document.getElementById('scan-modal').classList.add('hidden');
             });
         })();
 
@@ -5128,7 +5055,7 @@
             }
         }, 1000);
 
-       // 2. Metni Yapay Zeka ile İşleme Fonksiyonu (OTOMATİK MODEL BULUCU)
+       // 2. Metni Yapay Zeka ile İşleme Fonksiyonu (OTOMATİK MODEL ALGILAYICI)
         async function refineTextWithAI(elementId, sectionName) {
             const textarea = document.getElementById(elementId);
             const originalText = textarea.value.trim();
@@ -5147,62 +5074,54 @@
 
             const btn = event.target; 
             const originalBtnText = btn.innerHTML;
-            btn.innerHTML = '⏳'; 
-            showNotification('🧠 Uygun model aranıyor ve işleniyor...', 'info');
+            btn.innerHTML = '🔍'; 
+            btn.disabled = true; 
+            showNotification('🧠 Açık olan model aranıyor...', 'info');
 
             const prompt = `
-                Sen tecrübeli bir Acil Tıp Uzmanı ve Hukuk Danışmanısın.
-                Aşağıdaki metin bir hastanın "${sectionName}" bölümüne aittir.
-                
-                GÖREVİN:
-                1. Yazım ve imla hatalarını düzelt.
-                2. Tıbbi terminolojiye çevir.
-                3. Hukuki açıdan hekimi koruyacak dil kullan.
-                4. Sadece düzeltilmiş metni ver.
-
+                GÖREV: Aşağıdaki tıbbi notu Acil Tıp terminolojisine ve hukuki standartlara uygun, profesyonel bir dille yeniden yaz.
+                KURALLAR: Yazım hatalarını düzelt. Anlatım bozukluğunu gider. Yorum yapma. Sadece revize metni ver.
                 METİN: "${originalText}"
             `;
 
             try {
-                // ADIM 1: Önce mevcut modelleri listele
+                // ADIM 1: Önce hesabınızda aktif olan modelleri LİSTELE
+                // Bu adım "404 Not Found" hatasını engeller çünkü var olanı seçeriz.
                 const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+                
                 const listResponse = await fetch(listUrl);
                 const listData = await listResponse.json();
 
                 if (listData.error) {
-                    throw new Error("Model listesi alınamadı: " + listData.error.message);
+                    throw new Error("Model Listesi Hatası: " + listData.error.message);
                 }
 
-                // ADIM 2: Listeden uygun bir 'gemini' modeli seç
-                let selectedModel = null;
-                // Öncelik sırasına göre arayalım
-                const priorityModels = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-1.0-pro', 'gemini-pro'];
+                // ADIM 2: Listeden uygun bir model seç (İçinde 'gemini' geçen ve 'generateContent' destekleyen)
+                let validModelName = null;
                 
-                // API'den gelen listede bizim öncelikli modellerimizden biri var mı?
                 if (listData.models) {
-                    for (let pModel of priorityModels) {
-                        const found = listData.models.find(m => m.name.includes(pModel));
-                        if (found) {
-                            selectedModel = found.name; // Örn: "models/gemini-1.5-flash"
-                            console.log("Seçilen Model:", selectedModel);
-                            break;
-                        }
-                    }
-                    // Eğer önceliklilerden yoksa, içinde "gemini" geçen ilk modeli al
-                    if (!selectedModel) {
-                        const anyGemini = listData.models.find(m => m.name.includes('gemini') && m.supportedGenerationMethods.includes('generateContent'));
-                        if (anyGemini) selectedModel = anyGemini.name;
-                    }
+                    // Önce hızlı olan Flash'ı ara
+                    const flashModel = listData.models.find(m => m.name.includes('flash') && m.supportedGenerationMethods.includes('generateContent'));
+                    // Yoksa Pro'yu ara
+                    const proModel = listData.models.find(m => m.name.includes('pro') && m.supportedGenerationMethods.includes('generateContent'));
+                    // O da yoksa herhangi bir Gemini modelini al
+                    const anyModel = listData.models.find(m => m.name.includes('gemini') && m.supportedGenerationMethods.includes('generateContent'));
+
+                    if (flashModel) validModelName = flashModel.name;
+                    else if (proModel) validModelName = proModel.name;
+                    else if (anyModel) validModelName = anyModel.name;
                 }
 
-                if (!selectedModel) {
-                    throw new Error("Hesabınızda erişilebilir bir 'Gemini' modeli bulunamadı.");
+                if (!validModelName) {
+                    throw new Error("API Anahtarınızın yetkili olduğu hiçbir 'Gemini' modeli bulunamadı. Lütfen Google AI Studio'dan yeni bir anahtar alın.");
                 }
 
-                // ADIM 3: Bulunan modeli kullanarak isteği at
-                // selectedModel zaten "models/gemini-..." formatında gelir.
-                const generateUrl = `https://generativelanguage.googleapis.com/v1beta/${selectedModel}:generateContent?key=${apiKey}`;
-                
+                console.log("Kullanılacak Model Bulundu:", validModelName);
+
+                // ADIM 3: Bulunan modeli kullanarak işlemi yap
+                // validModelName örneğin "models/gemini-1.5-flash-latest" gibi gelir.
+                const generateUrl = `https://generativelanguage.googleapis.com/v1beta/${validModelName}:generateContent?key=${apiKey}`;
+
                 const response = await fetch(generateUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -5214,11 +5133,13 @@
                 const data = await response.json();
 
                 if (data.error) {
-                    alert("Model Hatası: " + data.error.message);
-                } 
-                else if (data.candidates && data.candidates.length > 0) {
+                    throw new Error(data.error.message);
+                }
+
+                if (data.candidates && data.candidates.length > 0) {
                     const newText = data.candidates[0].content.parts[0].text.trim();
-                    if (confirm(`Yapay Zeka (${selectedModel.replace('models/', '')}) Önerisi:\n\n${newText}\n\nOnaylıyor musunuz?`)) {
+                    
+                    if (confirm(`Yapay Zeka (${validModelName.replace('models/', '')}):\n\n${newText}\n\nOnaylıyor musunuz?`)) {
                         textarea.value = newText;
                         if(window.saveDetailAnamnesis) window.saveDetailAnamnesis();
                         else if(window.savePatientDetails) window.savePatientDetails();
@@ -5228,10 +5149,16 @@
 
             } catch (error) {
                 console.error('AI Hatası:', error);
-                // Kullanıcıya çözüm yolunu göster
-                alert(`BAĞLANTI HATASI:\n${error.message}\n\nÇÖZÜM:\nGoogle Cloud Console'a gidin, "Generative Language API" servisini aratın ve "ENABLE" (Etkinleştir) butonuna bastığınızdan emin olun.`);
+                
+                // Kullanıcıya kesin çözüm yolunu gösteren mesaj
+                if (error.message.includes('Model Listesi Hatası') || error.message.includes('404')) {
+                     alert(`KRİTİK HATA: API Servisi Kapalı\n\nGoogle, anahtarınızın bağlı olduğu projede "Generative Language API" servisini kapalı görüyor.\n\nÇÖZÜM:\n1. 'console.cloud.google.com' adresine gidin.\n2. Yukarıdan projenizi seçin.\n3. Arama çubuğuna 'Generative Language API' yazın.\n4. 'ENABLE' (Etkinleştir) butonuna basın.`);
+                } else {
+                    alert("HATA: " + error.message);
+                }
             } finally {
-                btn.innerHTML = originalBtnText; 
+                btn.innerHTML = originalBtnText;
+                btn.disabled = false;
             }
         }
         
