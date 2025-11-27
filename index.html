@@ -2869,8 +2869,16 @@
                             </div>
                         </div>
 
-                        <!-- Ek Hastalıklar (Comorbidities) -->
-                        <div class="collapsible" data-section="comorbidities">
+                        <!-- Özgeçmiş (Medical History) - parent collapsible -->
+                        <div class="collapsible" data-section="medical-history">
+                            <div class="collapsible-header" onclick="toggleCollapsible(event, this)">
+                                <span class="title font-semibold">🧾 Özgeçmiş</span>
+                                <button class="collapsible-toggle" aria-expanded="false">▸</button>
+                            </div>
+                            <div class="collapsible-content">
+
+                                <!-- Ek Hastalıklar (Comorbidities) -->
+                                <div class="collapsible" data-section="comorbidities">
                             <div class="collapsible-header" onclick="toggleCollapsible(event, this)">
                                 <span class="title text-red-700">🏥 Ek Hastalıklar</span>
                                 <button class="collapsible-toggle" aria-expanded="false">▸</button>
@@ -2960,7 +2968,8 @@
                                     class="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm">
                             </div>
                         </div>
-                                        NEWS Hesapla & Kaydet
+                            </div>
+                        </div>
                                     </button>
                                 </div>
                             </div>
