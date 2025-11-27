@@ -559,6 +559,17 @@
           Tetkik protokollerini düzenle
          </div>
         </button>
+        <button onclick="openSettingsSection('physical-exam-templates')" class="settings-icon-btn flex flex-col items-center justify-center p-4 md:p-6 bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl hover:shadow-lg transition transform hover:scale-105 group">
+         <div class="text-3xl md:text-5xl mb-2 md:mb-3">
+          🩺
+         </div>
+         <div class="font-semibold text-gray-800 text-sm md:text-base">
+          Fizik Muayene
+         </div>
+         <div class="text-xs text-gray-600 mt-1 opacity-0 group-hover:opacity-100 transition text-center hidden md:block">
+          Normal muayene şablonlarını düzenle
+         </div>
+        </button>
        </div>
       </div>
      </div>
@@ -618,6 +629,19 @@
         <!-- Dosya Import Butonu (1. İstenen) -->
         <button id="import-test-templates" class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700" onclick="document.getElementById('file-upload-test').click();"> 📥 Import JSON Dosyası </button>
         <input type="file" id="file-upload-test" class="hidden" accept=".json" onchange="handleFileImport(event, 'test')">
+        <button onclick="closeSettingsSection()" class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"> Kapat </button>
+       </div>
+      </div>
+     </div>
+     <!-- Fizik Muayene Şablonları Modal -->
+     <div id="physical-exam-templates-settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg p-6 max-w-3xl w-full mx-4 max-h-[90%] overflow-y-auto">
+       <h3 class="text-2xl font-bold mb-4">🩺 Fizik Muayene Şablonları</h3>
+       <p class="text-sm text-gray-600 mb-4">Her muayene bölgesinin normal bulgularını özelleştirin. Bu şablonlar detay panelinde muayene alanına eklenecektir.</p>
+       <div id="physical-exam-templates-settings-list" class="space-y-4 mb-4">
+        <!-- Physical exam templates will be rendered here -->
+       </div>
+       <div class="flex gap-3 flex-wrap">
         <button onclick="closeSettingsSection()" class="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"> Kapat </button>
        </div>
       </div>
@@ -941,6 +965,19 @@
                 }
             } catch (e) { console.info('scoring_systems yok veya yüklenemedi'); }
 
+            // Fizik muayene şablonları
+            try {
+                const peResp = await fetch(`${base}/templates/physical_exam_templates.json`);
+                if (peResp.ok) {
+                    const peJson = await peResp.json();
+                    if (peJson.templates) {
+                        physicalExamTemplates = peJson.templates;
+                        localStorage.setItem('physicalExamTemplates', JSON.stringify(physicalExamTemplates));
+                        console.info('External physical exam templates yüklendi.');
+                    }
+                }
+            } catch (e) { console.info('physical_exam_templates yok veya yüklenemedi'); }
+
             // Hesaplama motorları (JS modülleri). Örn: ./external/engines/heart.js
             try {
                 // Kalp (HEART) motoru
@@ -978,6 +1015,7 @@
         let currentFilter = 'all';
         let currentAreaFilter = 'all'; 
         let currentAnamnesisStatusFilter = 'active'; // Yeni filtre için varsayılan değer
+        let physicalExamTemplates = {}; // Fizik muayene şablonları (external/templates/physical_exam_templates.json'dan yüklenir)
         let currentSort = 'time';
         let testCheckInterval = null;
         let currentTemplateSection = ''; 
@@ -3107,9 +3145,22 @@
                                                     </span>
                                                 </div>
                                             </div>
-                                            <textarea id="detail-anam-${section}" 
-                                                class="w-full flex-1 px-2 py-1 border border-gray-300 rounded-lg text-sm resize-none" rows="6"
-                                                onchange="saveDetailAnamnesis()">${selectedPatient[fieldName] || ''}</textarea>
+                                            <div class="flex gap-2 flex-1">
+                                                <textarea id="detail-anam-${section}" 
+                                                    class="flex-1 px-2 py-1 border border-gray-300 rounded-lg text-sm resize-none" rows="6"
+                                                    onchange="saveDetailAnamnesis()">${selectedPatient[fieldName] || ''}</textarea>
+                                                ${section === 'examination' ? `
+                                                    <div class="flex flex-col gap-1 justify-start pt-1">
+                                                        <button type="button" class="exam-region-btn px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm" onclick="insertExamTemplate('head', 'detail-anam-examination')" title="Kafa muayenesi">🧠</button>
+                                                        <button type="button" class="exam-region-btn px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm" onclick="insertExamTemplate('thorax', 'detail-anam-examination')" title="Toraks muayenesi">🫀</button>
+                                                        <button type="button" class="exam-region-btn px-2 py-1 bg-cyan-100 text-cyan-700 rounded hover:bg-cyan-200 text-sm" onclick="insertExamTemplate('lungs', 'detail-anam-examination')" title="Akciğer muayenesi">💨</button>
+                                                        <button type="button" class="exam-region-btn px-2 py-1 bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200 text-sm" onclick="insertExamTemplate('abdomen', 'detail-anam-examination')" title="Abdomen muayenesi">🫔</button>
+                                                        <button type="button" class="exam-region-btn px-2 py-1 bg-green-100 text-green-700 rounded hover:bg-green-200 text-sm" onclick="insertExamTemplate('extremities', 'detail-anam-examination')" title="Ekstremite muayenesi">🦵</button>
+                                                        <button type="button" class="exam-region-btn px-2 py-1 bg-pink-100 text-pink-700 rounded hover:bg-pink-200 text-sm" onclick="insertExamTemplate('skin', 'detail-anam-examination')" title="Cilt muayenesi">🩹</button>
+                                                        <button type="button" class="exam-region-btn px-2 py-1 bg-purple-100 text-purple-700 rounded hover:bg-purple-200 text-sm" onclick="insertExamTemplate('oropharynx', 'detail-anam-examination')" title="Orofarenks muayenesi">👄</button>
+                                                    </div>
+                                                ` : ''}
+                                            </div>
                                         </div>
                                     `;
                                 }).join('')}
@@ -3706,6 +3757,39 @@
             showNotification('✅ Anamnez bilgileri kaydedildi!', 'success');
         };
 
+        // Fizik muayene şablonlarını yükle (localStorage'dan veya varsayılanları kullan)
+        window.loadPhysicalExamTemplates = () => {
+            try {
+                const stored = localStorage.getItem('physicalExamTemplates');
+                if (stored) physicalExamTemplates = JSON.parse(stored);
+            } catch (e) { console.warn('Fizik muayene şablonları yüklenemedi:', e); }
+        };
+
+        // Muayene alanına seçilen bölge şablonunu ekle
+        window.insertExamTemplate = (region, targetFieldId) => {
+            if (!physicalExamTemplates || !physicalExamTemplates[region]) {
+                showNotification('❌ ' + region + ' şablonu bulunamadı.', 'error');
+                return;
+            }
+            const template = physicalExamTemplates[region];
+            const textarea = document.getElementById(targetFieldId);
+            if (!textarea) return;
+
+            const existingText = textarea.value.trim();
+            const newText = template.normalFindings;
+
+            // Eğer metin boşsa direkt ekle, değilse yeni satırla ayırarak ekle
+            if (existingText) {
+                textarea.value = existingText + '\n\n' + newText;
+            } else {
+                textarea.value = newText;
+            }
+
+            // Kaydet
+            saveDetailAnamnesis();
+            showNotification(`✅ ${template.label} normal muayene bulguları eklendi.`, 'success');
+        };
+
         // Simple Speech-to-Text (Web Speech API) helper for anamnesis fields
         window._speechRec = null;
         window._speechTarget = null;
@@ -3892,6 +3976,7 @@
             window.renderScoringSettings();
             window.renderAnamnesisSettings();
             window.renderTestTemplatesSettings();
+            window.renderPhysicalExamTemplatesSettings();
         };
 
         window.renderDiagnosisSettings = () => {
@@ -4112,6 +4197,51 @@
                     updatePatientInLocalStorage(patient);
                  }
              } catch (e) { console.error("Toggle Result Check hatası:", e); }
+        };
+
+        // Fizik muayene şablonlarını ayarlarında göster ve düzenle
+        window.renderPhysicalExamTemplatesSettings = () => {
+            const listEl = document.getElementById('physical-exam-templates-settings-list');
+            if (!listEl) return;
+
+            const regions = ['head', 'thorax', 'lungs', 'abdomen', 'extremities', 'skin', 'oropharynx'];
+            listEl.innerHTML = regions.map(region => {
+                const template = physicalExamTemplates[region] || {};
+                const label = template.label || region;
+                const icon = template.icon || '❓';
+                const findings = template.normalFindings || '';
+                return `
+                    <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-2xl">${icon}</span>
+                            <span class="font-semibold text-lg">${label}</span>
+                        </div>
+                        <textarea id="exam-template-${region}" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y" rows="4"
+                            placeholder="Bu bölgenin normal muayene bulguları...">${findings}</textarea>
+                        <button onclick="savePhysicalExamTemplate('${region}')" 
+                            class="mt-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">
+                            ✅ Kaydet
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        };
+
+        window.savePhysicalExamTemplate = (region) => {
+            const textarea = document.getElementById(`exam-template-${region}`);
+            if (!textarea) return;
+
+            const newFindings = textarea.value.trim();
+            if (!physicalExamTemplates[region]) {
+                physicalExamTemplates[region] = {};
+            }
+            physicalExamTemplates[region].normalFindings = newFindings;
+
+            // localStorage'e kaydet
+            localStorage.setItem('physicalExamTemplates', JSON.stringify(physicalExamTemplates));
+            showNotification(`✅ ${physicalExamTemplates[region].label || region} şablonu kaydedildi!`, 'success');
+            console.log('Fizik muayene şablonu güncellendi:', region, physicalExamTemplates[region]);
         };
         
         window.toggleTestComplete = (patientId, testIndex) => {
@@ -4589,6 +4719,9 @@
             } catch (e) {
                 console.info('External kaynaklar yüklenemedi veya yok. Devam ediliyor.');
             }
+
+            // Fizik muayene şablonlarını yükle
+            loadPhysicalExamTemplates();
             
             // Varsayılan Şablonları/Skorları Ayarla (Eğer boşsa) 
             if (diagnosisTemplates.length === 0) {

@@ -1,0 +1,52 @@
+{
+  "templates": {
+    "head": {
+      "icon": "🧠",
+      "label": "Kafa",
+      "normalFindings": "Kafa simetrik, yumuşak doku travması yok. Tıkayıcı defektler, ödüm, şişkinlik yok. Pupiller eşit, yuvarlak, ışığa reaktif (PERRL). Göz hareketleri bilateral ve simetrik (oculomotor, trochlear, abducens normali). Fasiyal simetriye tanı yok, güç kayıpları yok. Odyometri, Weber, Rinne testi normali. Tüm kranyal sinirler (I-XII) intakt.",
+      "defaultEnabled": true
+    },
+    "thorax": {
+      "icon": "🫀",
+      "label": "Toraks",
+      "normalFindings": "Toraks simetrik, rastgele travmatik bulgusu yok. Göğüs duvarı hareket normal, koztovertebral açılarda hassasiyet yok. Akciğer sesleri bilateral ve esitsiyen. Kalp sesleri net, normal ritim, üfürüm yok. JVP normal. Periferik ödem yok.",
+      "defaultEnabled": true
+    },
+    "lungs": {
+      "icon": "💨",
+      "label": "Akciğer",
+      "normalFindings": "Akciğer sesleri bilateral açık, wheezing, rales, ronchi yok. Tüm lob bölgelerine itme ve müziksalizatyon normal. Maksimum inspiratuar ve ekspiratuar hava girişi eşit. Aksesuar kas kullanımı yok.",
+      "defaultEnabled": true
+    },
+    "abdomen": {
+      "icon": "🫔",
+      "label": "Abdomen",
+      "normalFindings": "Abdomen düz, travmatik bulgular yok. Karın cilt normali. Auskultasyon: aktif bağırsaklı sesler normal. Palpasyon: göğüs duvarı soft, non-tender, rebaund yok, rigidite yok, organomegali yok. Perkusyon: timpanik ses. Renal açı hassasiyeti yok. Inguinal hernia yok.",
+      "defaultEnabled": true
+    },
+    "extremities": {
+      "icon": "🦵",
+      "label": "Ekstremite",
+      "normalFindings": "Tüm ekstremitelerde vasküler ve nörolojik bulgular intakt. Bilateral nabızlar (radial, femoralis, distal) eşit ve simetrik. Cilt perfüzyonu normal, şop zamanı <2 saniye. Derin tendon refleksleri 2+/5 bilateral. Motor kuvvet 5/5 tüm kas gruplarında. Sensasyon intakt. Edema yok. Varises yok.",
+      "defaultEnabled": true
+    },
+    "skin": {
+      "icon": "🩹",
+      "label": "Cilt",
+      "normalFindings": "Cilt tur ve elastisiyetesi normali, turuş süresi <2 saniye. Hidrasyonu uygun. Yaşlı başları, tıkayıcılar, urtika, dönerler yok. Tırnak yatağı rengi normali. Kaudal ve periyungal bölgelerde inflamasyon yok. Cilt lesyonları yok.",
+      "defaultEnabled": true
+    },
+    "oropharynx": {
+      "icon": "👄",
+      "label": "Orofarenks",
+      "normalFindings": "Dişler temiz, caries yok. Diş eti sağlıklı, kızarma veya kanamadan yok. Ağız mukozası pembe ve nemli. Dil midline, atrofi yok, fasikülasyon yok. Tonsiller normal boyut, eritem veya eksüda yok. Yumuşak damak, uvula midline, simetrik palatal yükselen. Farinks pembe, eksüda yok.",
+      "defaultEnabled": true
+    }
+  },
+  "settings": {
+    "insertMethod": "append",
+    "defaultLanguage": "tr",
+    "includeTimestamp": false,
+    "customTemplates": {}
+  }
+}
